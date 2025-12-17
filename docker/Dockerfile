@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
 # Copy scripts
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 COPY scripts/run_check.py /app/run_check.py
 COPY check.py /app/check.py
 
