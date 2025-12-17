@@ -4,7 +4,7 @@ import random
 def main():
     """Main function that returns a random integer between 0 and 20"""
     #return random.randint(0, 20)
-    return 13
+    return 12
 
 if __name__ == "__main__":
     print(main())
