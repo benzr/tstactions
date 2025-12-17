@@ -1,0 +1,62 @@
+name: Execute Check and Update Results
+
+on:
+  push:
+    paths:
+      - 'check.py'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  execute-and-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      with:
+        persist-credentials: false
+        
+    - name: Build Docker image
+      run: |
+        docker build -t check-runner ./docker
+        
+    - name: Run check.py in Docker
+      id: run_check
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+      run: |
+        # Create or copy database to workspace
+        if [ -f results.db ]; then
+          cp results.db /tmp/results.db
+        else
+          sqlite3 /tmp/results.db "VACUUM;"
+        fi
+        
+        # Run Docker container
+        docker run \
+          -v /tmp/results.db:/github/workspace/results.db \
+          -e GITHUB_ACTOR=${{ github.actor }} \
+          check-runner
+        
+        # Copy database back
+        cp /tmp/results.db results.db
+        
+    - name: Generate HTML page
+      run: |
+        python generate_page.py
+        
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        
+    - name: Commit and push if changed
+      run: |
+        git add results.db index.html
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Update results database and page [skip ci]" && git push)
+        
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./
