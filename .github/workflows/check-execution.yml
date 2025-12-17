@@ -23,6 +23,13 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       
+    - name: Prepare Docker context
+      run: |
+        # Copy necessary files to docker/ folder
+        cp check.py docker/
+        cp -r scripts docker/
+        cp generate_page.py docker/
+      
     - name: Build Docker image
       run: |
         docker build -t check-runner ./docker
