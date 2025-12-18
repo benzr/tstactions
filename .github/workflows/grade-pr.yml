@@ -97,6 +97,28 @@ jobs:
           echo "Workspace: $WORKSPACE"
           ls -la "$WORKSPACE"
 
+      - name: Debug before Docker run
+        run: |
+          echo "=== DEBUG VARIABLES ==="
+          echo "File output: ${{ steps.find-file.outputs.file }}"
+          echo "File basename: ${{ steps.find-file.outputs.file_basename }}"
+          echo "Username: ${{ steps.find-file.outputs.username }}"
+          
+          # Check if variables exist
+          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
+            echo "ERROR: file is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.file_basename }}" ]; then
+            echo "ERROR: file_basename is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.username }}" ]; then
+            echo "ERROR: username is EMPTY!"
+          fi
+          
+          echo "=== FILES ==="
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          ls -la "$WORKSPACE" || echo "No workspace"
+
       - name: Run evaluation in Docker
         id: evaluate
         run: |
@@ -132,7 +154,7 @@ jobs:
             ls -la "$WORKSPACE"
             echo "score=0" >> $GITHUB_OUTPUT
           fi
-          
+
       - name: Upload graded result artifact
         uses: actions/upload-artifact@v4
         with:
