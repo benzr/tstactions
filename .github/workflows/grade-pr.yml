@@ -85,24 +85,24 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
 
-      - name: Find student submission
-        id: find-file
-        run: |
-          for file in ex1_*.py; do
-            if [ -f "$file" ]; then
-              USERNAME="${file#ex1_}"
-              USERNAME="${USERNAME%.py}"
-              echo "file=$file" >> $GITHUB_OUTPUT
-              echo "username=$USERNAME" >> $GITHUB_OUTPUT
-              echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
-              break
-            fi
-          done
+      # - name: Find student submission
+      #   id: find-file
+      #   run: |
+      #     for file in ex1_*.py; do
+      #       if [ -f "$file" ]; then
+      #         USERNAME="${file#ex1_}"
+      #         USERNAME="${USERNAME%.py}"
+      #         echo "file=$file" >> $GITHUB_OUTPUT
+      #         echo "username=$USERNAME" >> $GITHUB_OUTPUT
+      #         echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
+      #         break
+      #       fi
+      #     done
           
-          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
-            echo "ERROR: No valid ex1_*.py file found"
-            exit 1
-          fi
+      #     if [ -z "${{ steps.find-file.outputs.file }}" ]; then
+      #       echo "ERROR: No valid ex1_*.py file found"
+      #       exit 1
+      #     fi
 
       - name: Create temporary workspace
         run: |
