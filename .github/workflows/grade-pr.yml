@@ -132,11 +132,14 @@ jobs:
           echo "Database path: $TEMP_DB"
           
           # Run Docker with proper user mapping
-          docker run \
+            echo "Docker command:"
+            echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+            
+            docker run \
             --rm \
             -v "$WORKSPACE:/data:rw" \
             -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
-            --user "root" \  # Run as root temporarily to debug
+            --user "root" \
             sandbox-runner:latest \
             "/app/student_code.py" \
             "${{ steps.find-file.outputs.username }}"
