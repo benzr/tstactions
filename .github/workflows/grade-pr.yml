@@ -163,14 +163,34 @@ jobs:
         run: |
           # Create the expected /tmp/grade_workspace structure
           mkdir -p /tmp/grade_workspace
-          if [ -f "$GITHUB_WORKSPACE/docker_workspace/results.db" ]; then
-            cp "$GITHUB_WORKSPACE/docker_workspace/results.db" /tmp/grade_workspace/
-            echo "Artifact prepared at /tmp/grade_workspace/results.db"
+          
+          # Copy from ACTUAL location to /tmp for compatibility
+          ACTUAL_DB="$GITHUB_WORKSPACE/grade_workspace/results.db"
+          
+          if [ -f "$ACTUAL_DB" ]; then
+            echo "📁 Copying from: $ACTUAL_DB"
+            cp "$ACTUAL_DB" /tmp/grade_workspace/
+            echo "✅ Artifact prepared at /tmp/grade_workspace/results.db"
           else
-            # Create empty DB for artifact (so upload doesn't fail)
+            echo "⚠️ Database not found at: $ACTUAL_DB"
+            echo "📁 Searching for database..."
+            find "$GITHUB_WORKSPACE" -name "*.db" -type f | head -5
+            # Create empty DB as fallback
             sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
-            echo "Created empty artifact (Docker failed)"
           fi
+
+      # - name: Prepare artifact
+      #   run: |
+      #     # Create the expected /tmp/grade_workspace structure
+      #     mkdir -p /tmp/grade_workspace
+      #     if [ -f "$GITHUB_WORKSPACE/docker_workspace/results.db" ]; then
+      #       cp "$GITHUB_WORKSPACE/docker_workspace/results.db" /tmp/grade_workspace/
+      #       echo "Artifact prepared at /tmp/grade_workspace/results.db"
+      #     else
+      #       # Create empty DB for artifact (so upload doesn't fail)
+      #       sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
+      #       echo "Created empty artifact (Docker failed)"
+      #     fi
 
       - name: Upload graded result artifact
         uses: actions/upload-artifact@v4
