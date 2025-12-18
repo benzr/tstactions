@@ -16,6 +16,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
       - name: Set up Docker Buildx with caching
         uses: docker/setup-buildx-action@v3
 
