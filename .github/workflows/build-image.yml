@@ -23,7 +23,10 @@ jobs:
           rm -rf /tmp/.buildx-cache || true
 
       - name: Copy evaluator.py to docker folder
-        run: cp evaluator.py docker/
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
 
       - name: Build fresh image
         uses: docker/build-push-action@v5
