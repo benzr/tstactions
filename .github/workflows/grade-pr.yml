@@ -207,6 +207,10 @@ jobs:
                           `[View Leaderboard](https://${context.repo.owner}.github.io/${context.repo.repo}/)`;
             
             console.log(`Message: ${message}`);
+            console.log(`PR Number: ${prNumber}`);
+            console.log(`Repo: ${context.repo.owner}/${context.repo.repo}`);
+            console.log(`Username: ${username}`);
+            console.log(`Owner: ${context.repo.owner}`);
 
             await github.rest.issues.createComment({
               issue_number: prNumber,
