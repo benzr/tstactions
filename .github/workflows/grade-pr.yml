@@ -88,38 +88,51 @@ jobs:
 
       - name: Create temporary workspace
         run: |
-          mkdir -p /tmp/grade_workspace
-          cp "${{ steps.find-file.outputs.file }}" /tmp/grade_workspace/
-          chown -R 1000:1000 /tmp/grade_workspace/
-          chmod 755 /tmp/grade_workspace
+          # Use workspace directory instead of /tmp
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          mkdir -p "$WORKSPACE"
+          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
 
       - name: Run evaluation in Docker
         id: evaluate
         run: |
-          TEMP_DB="/tmp/grade_workspace/results.db"
-          # Create empty database if needed
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          TEMP_DB="$WORKSPACE/results.db"
+          
+          # Create empty database
           sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
           
           echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
+          echo "Database path: $TEMP_DB"
           
+          # Run Docker with proper user mapping
           docker run \
             --rm \
-            -v "/tmp/grade_workspace:/data:ro" \
-            -v "$TEMP_DB:/app/results.db" \
+            -v "$WORKSPACE:/data:rw" \
+            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
+            --user "root" \  # Run as root temporarily to debug
             sandbox-runner:latest \
-            "/data/${{ steps.find-file.outputs.file_basename }}" \
+            "/app/student_code.py" \
             "${{ steps.find-file.outputs.username }}"
           
-          # Extract score for PR comment
+          # Check if DB was created
           if [ -f "$TEMP_DB" ]; then
+            echo "Database created successfully"
+            ls -la "$TEMP_DB"
             SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
             echo "score=$SCORE" >> $GITHUB_OUTPUT
-            echo "Extracted score: $SCORE"
+            echo "Score: $SCORE"
           else
-            echo "WARNING: No results.db created"
+            echo "ERROR: Database not created!"
+            echo "Files in workspace:"
+            ls -la "$WORKSPACE"
             echo "score=0" >> $GITHUB_OUTPUT
           fi
-
+          
       - name: Upload graded result artifact
         uses: actions/upload-artifact@v4
         with:
