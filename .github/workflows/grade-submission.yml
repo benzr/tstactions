@@ -1,0 +1,126 @@
+name: Grade Submission
+
+on:
+  pull_request:
+    paths: ['ex1_*.py']
+
+permissions:
+  contents: read
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Debug - List student files
+        run: |
+          ls -la
+          find . -name "ex1_*.py" -type f
+
+      - name: Find student submission
+        id: find-file
+        run: |
+          for file in ex1_*.py; do
+            if [ -f "$file" ]; then
+              USERNAME="${file#ex1_}"
+              USERNAME="${USERNAME%.py}"
+              echo "file=$file" >> $GITHUB_OUTPUT
+              echo "username=$USERNAME" >> $GITHUB_OUTPUT
+              echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
+              cp "$file" ../
+              break
+            fi
+          done
+
+          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
+            echo "ERROR: No submission found"
+            exit 1
+          fi
+
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+      - name: Create temporary workspace
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          mkdir -p "$WORKSPACE"
+          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          DB="$WORKSPACE/results.db"
+          sqlite3 "$DB" "VACUUM;" || true
+
+          docker run --rm \
+            -v "$WORKSPACE:/data:rw" \
+            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
+            --user root \
+            sandbox-runner:latest \
+            "/app/student_code.py" \
+            "${{ steps.find-file.outputs.username }}"
+
+          SCORE=$(sqlite3 "$DB" \
+            "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" || echo 0)
+
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+
+      - name: Prepare artifact
+        run: |
+          mkdir -p /tmp/grade_workspace
+          cp "$GITHUB_WORKSPACE/grade_workspace/results.db" /tmp/grade_workspace/
+
+      - name: Upload graded DB
+        uses: actions/upload-artifact@v4
+        with:
+          name: graded-result-${{ github.event.pull_request.number }}
+          path: /tmp/grade_workspace/results.db
+          retention-days: 7
+
+      - name: Save comment metadata
+        run: |
+          echo "SCORE=${{ steps.evaluate.outputs.score }}" > comment-data.txt
+          echo "USERNAME=${{ steps.find-file.outputs.username }}" >> comment-data.txt
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> comment-data.txt
+
+      - name: Upload comment metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: comment-data-${{ github.event.pull_request.number }}
+          path: comment-data.txt

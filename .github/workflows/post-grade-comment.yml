@@ -1,0 +1,54 @@
+name: Post Grade Comment
+
+on:
+  workflow_run:
+    workflows: ["Grade Submission"]
+    types: [completed]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  comment:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Extract PR number
+        id: pr
+        run: |
+          echo "pr=${{ github.event.workflow_run.pull_requests[0].number }}" >> $GITHUB_OUTPUT
+
+      - name: Download comment data
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          name: comment-data-${{ steps.pr.outputs.pr }}
+
+      - name: Load data
+        id: data
+        run: |
+          source comment-data.txt
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "username=$USERNAME" >> $GITHUB_OUTPUT
+          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Post grade as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number("${{ steps.data.outputs.pr }}"),
+              body: `## 🎯 Submission Graded
+
+**Student:** ${{ steps.data.outputs.username }}
+**Score:** ${{ steps.data.outputs.score }}/100
+
+_This result will appear on the leaderboard after the PR is merged._`
+            });
