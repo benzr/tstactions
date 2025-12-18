@@ -1,0 +1,112 @@
+name: Update Leaderboard
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download graded result
+        uses: actions/download-artifact@v4
+        with:
+          name: graded-result-${{ github.event.pull_request.number }}
+          path: ./graded_result
+
+      - name: Initialize or load central database
+        run: |
+          if [ -f "results.db" ]; then
+            echo "Using existing results.db"
+          else
+            echo "Creating new results.db with schema"
+            sqlite3 results.db "
+            CREATE TABLE IF NOT EXISTS submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                github_username TEXT NOT NULL,
+                exercise_name TEXT NOT NULL,
+                result_score INTEGER,
+                file_content TEXT NOT NULL,
+                passed_tests INTEGER,
+                total_tests INTEGER,
+                feedback TEXT
+            );"
+            echo "Schema created"
+          fi
+
+      - name: Merge student result
+        run: |
+          if [ -f "graded_result/results.db" ]; then
+            echo "Merging result for ${{ github.event.pull_request.user.login }}"
+            
+            # First, get the student's result from their DB
+            STUDENT_USERNAME="${{ github.event.pull_request.user.login }}"
+            
+            sqlite3 graded_result/results.db << 'EOF'
+            .mode csv
+            .output /tmp/student_data.csv
+            SELECT * FROM submissions WHERE github_username = '$STUDENT_USERNAME' ORDER BY id DESC LIMIT 1;
+            EOF
+            
+            if [ -s "/tmp/student_data.csv" ]; then
+              # Import into main database
+              sqlite3 results.db << 'EOF'
+              .mode csv
+              .import /tmp/student_data.csv submissions
+              EOF
+              echo "✅ Result merged successfully"
+            else
+              echo "⚠️ No data found for $STUDENT_USERNAME in graded DB"
+            fi
+          else
+            echo "⚠️ No graded result found, continuing without merge"
+          fi
+
+      - name: Generate leaderboard HTML
+        run: |
+          python generate_page.py
+
+      - name: Commit and push updated files
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Add only what changed
+          git add results.db index.html
+          
+          # Check if there are actual changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update leaderboard with ${{ github.event.pull_request.user.login }}'s submission [skip ci]"
+            git push
+            echo "Changes pushed successfully"
+          fi
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
