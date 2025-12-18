@@ -3,12 +3,17 @@ on:
   pull_request:
     paths: ['ex1_*.py']
 
-permissions:
-  contents: read
-  pull-requests: write
+# moved from top-level to job-level to allow finer permission control
+# permissions:
+#   contents: read
+#   pull-requests: write
 
 jobs:
   grade:
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR code
