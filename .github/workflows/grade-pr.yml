@@ -10,11 +10,11 @@ on:
 
 jobs:
   grade:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
       issues: write
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout PR code
         uses: actions/checkout@v4
@@ -184,19 +184,6 @@ jobs:
             sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
           fi
 
-      # - name: Prepare artifact
-      #   run: |
-      #     # Create the expected /tmp/grade_workspace structure
-      #     mkdir -p /tmp/grade_workspace
-      #     if [ -f "$GITHUB_WORKSPACE/docker_workspace/results.db" ]; then
-      #       cp "$GITHUB_WORKSPACE/docker_workspace/results.db" /tmp/grade_workspace/
-      #       echo "Artifact prepared at /tmp/grade_workspace/results.db"
-      #     else
-      #       # Create empty DB for artifact (so upload doesn't fail)
-      #       sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
-      #       echo "Created empty artifact (Docker failed)"
-      #     fi
-
       - name: Upload graded result artifact
         uses: actions/upload-artifact@v4
         with:
@@ -219,6 +206,8 @@ jobs:
                           `_This result will appear on the leaderboard after the PR is merged._\n\n` +
                           `[View Leaderboard](https://${context.repo.owner}.github.io/${context.repo.repo}/)`;
             
+            console.log(`Message: ${message}`);
+
             await github.rest.issues.createComment({
               issue_number: prNumber,
               owner: context.repo.owner,
