@@ -123,6 +123,7 @@ jobs:
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           ls -la "$WORKSPACE" || echo "No workspace"
 
+      - name: Run evaluation in Docker
         id: evaluate
         run: |
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
