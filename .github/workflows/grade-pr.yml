@@ -11,27 +11,25 @@ jobs:
   grade:
     runs-on: ubuntu-latest
     steps:
-      # - name: Checkout PR code
-      #   uses: actions/checkout@v4
-      #   with:
-      #     ref: ${{ github.event.pull_request.head.sha }}
       - name: Checkout PR code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          path: ./student-submission
+          #path: ./student-submission
 
       - name: Debug: List student files
         run: |
           echo "=== Student submission directory ==="
-          cd student-submission && ls -la
+          #cd student-submission && ls -la
+          ls -la
           echo "=== Looking for ex1 files ==="
-          cd student-submission && find . -name "ex1_*.py" -type f
+          #cd student-submission && find . -name "ex1_*.py" -type f
+          find . -name "ex1_*.py" -type f
 
       - name: Find student submission
         id: find-file
         run: |
-          cd student-submission
+          #cd student-submission
           for file in ex1_*.py; do
             if [ -f "$file" ]; then
               USERNAME="${file#ex1_}"
@@ -49,8 +47,10 @@ jobs:
           if [ -z "${{ steps.find-file.outputs.file }}" ]; then
             echo "ERROR: No valid ex1_*.py file found in PR"
             echo "Expected file name: ex1_GITHUBUSERNAME.py"
-            echo "Files in student-submission/:"
-            ls -la student-submission/
+            #echo "Files in student-submission/:"
+            #ls -la student-submission/
+            echo "Files in ./:"
+            ls -la ./
             exit 1
           fi
 
