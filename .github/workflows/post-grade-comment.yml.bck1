@@ -36,6 +36,7 @@ jobs:
               console.log(`- ${a.name} (expired: ${a.expired})`);
             }
 
+      # do not work , permission issues 
       # - name: Download comment data
       #   uses: actions/download-artifact@v4
       #   with:
@@ -49,30 +50,32 @@ jobs:
       #     echo "score=$SCORE" >> $GITHUB_OUTPUT
       #     echo "username=$USERNAME" >> $GITHUB_OUTPUT
       #     echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
-      - name: Read grading check
-        id: check
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const sha = context.payload.workflow_run.head_sha;
 
-            const checks = await github.rest.checks.listForRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: sha
-            });
+      # do not work , permission issues at creation of the check in the first workflow
+      # - name: Read grading check
+      #   id: check
+      #   uses: actions/github-script@v7
+      #   with:
+      #     script: |
+      #       const sha = context.payload.workflow_run.head_sha;
 
-            const grader = checks.data.check_runs.find(
-              c => c.name === "Autograder"
-            );
+      #       const checks = await github.rest.checks.listForRef({
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         ref: sha
+      #       });
 
-            if (!grader) {
-              core.setFailed("Autograder check not found");
-              return;
-            }
+      #       const grader = checks.data.check_runs.find(
+      #         c => c.name === "Autograder"
+      #       );
 
-            core.setOutput("summary", grader.output.summary);
-            
+      #       if (!grader) {
+      #         core.setFailed("Autograder check not found");
+      #         return;
+      #       }
+
+      #       core.setOutput("summary", grader.output.summary);
+
       - name: Post grade as PR comment
         uses: actions/github-script@v7
         with:

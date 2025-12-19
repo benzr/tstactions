@@ -1,0 +1,102 @@
+name: Publish Leaderboard
+
+on:
+  push:
+    branches: [main]
+    
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  leaderboard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find submission
+        id: find
+        run: |
+          for file in ex1_*.py; do
+            if [ -f "$file" ]; then
+              USER="${file#ex1_}"
+              USER="${USER%.py}"
+              echo "file=$file" >> $GITHUB_OUTPUT
+              echo "user=$USER" >> $GITHUB_OUTPUT
+              break
+            fi
+          done
+
+          [ -z "${{ steps.find.outputs.file }}" ] && exit 0
+
+      - name: Build grader image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          load: true
+          tags: sandbox-runner:latest
+
+      - name: Run trusted grading
+        id: grade
+        run: |
+          mkdir -p work
+          cp "${{ steps.find.outputs.file }}" work/student.py
+
+          docker run --rm \
+            -v "$PWD/work:/data" \
+            sandbox-runner:latest \
+            /data/student.py \
+            "${{ steps.find.outputs.user }}"
+
+          SCORE=$(sqlite3 work/results.db \
+            "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" \
+            2>/dev/null || echo 0)
+
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+
+      - name: Update leaderboard database
+        run: |
+          mkdir -p leaderboard
+
+          sqlite3 leaderboard/results.db <<EOF
+          CREATE TABLE IF NOT EXISTS results (
+            user TEXT PRIMARY KEY,
+            score INTEGER,
+            updated_at TEXT
+          );
+
+          INSERT OR REPLACE INTO results
+          VALUES (
+            '${{ steps.find.outputs.user }}',
+            ${{ steps.grade.outputs.score }},
+            datetime('now')
+          );
+          EOF
+
+      - name: Commit leaderboard data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add leaderboard/results.db
+          git commit -m "Update grade for ${{ steps.find.outputs.user }}" || exit 0
+          git push
+
+      - name: Build leaderboard page
+        run: |
+          mkdir -p public
+          sqlite3 leaderboard/results.db <<EOF
+          .mode html
+          .output public/index.html
+          SELECT user, score, updated_at
+          FROM results
+          ORDER BY score DESC;
+          EOF
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
