@@ -92,6 +92,7 @@ jobs:
         run: |
           # Use workspace directory instead of /tmp
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          echo "Workspace to be created: $WORKSPACE"
           mkdir -p "$WORKSPACE"
           cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
           
