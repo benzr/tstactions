@@ -17,21 +17,60 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find submission
-        id: find
+      # Do not work , chatGPT always messed up with this part
+      # - name: Find submission
+      #   id: find
+      #   run: |
+      #     for file in ex1_*.py; do
+      #       if [ -f "$file" ]; then
+      #         USER="${file#ex1_}"
+      #         USER="${USER%.py}"
+      #         echo "file=$file" >> $GITHUB_OUTPUT
+      #         echo "user=$USER" >> $GITHUB_OUTPUT
+      #         echo "Found submission: $file from $USER"
+      #         break
+      #       fi
+      #     done
+
+      #     [ -z "${{ steps.find.outputs.file }}" ] && exit 0
+
+      - name: Debug - List student files
         run: |
+          echo "=== Student submission directory ==="
+          #cd student-submission && ls -la
+          ls -la
+          echo "=== Looking for ex1 files ==="
+          #cd student-submission && find . -name "ex1_*.py" -type f
+          find . -name "ex1_*.py" -type f
+
+      - name: Find student submission
+        id: find-file
+        run: |
+          FOUND_FILE=""
+          FOUND_USERNAME=""
+          #cd student-submission
           for file in ex1_*.py; do
             if [ -f "$file" ]; then
-              USER="${file#ex1_}"
-              USER="${USER%.py}"
+              FOUND_FILE="$file"
+              USERNAME="${file#ex1_}"
+              USERNAME="${USERNAME%.py}"
+              FOUND_USERNAME="$USERNAME"
               echo "file=$file" >> $GITHUB_OUTPUT
-              echo "user=$USER" >> $GITHUB_OUTPUT
-              echo "Found submission: $file from $USER"
+              echo "username=$USERNAME" >> $GITHUB_OUTPUT
+              echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
+              echo "Found submission: $file from $USERNAME"
+              # Copy to workspace root for Docker
+              cp "$file" ../
               break
             fi
           done
-
-          [ -z "${{ steps.find.outputs.file }}" ] && exit 0
+          
+          if [ -z "$FOUND_FILE" ]; then
+            echo "ERROR: No valid ex1_*.py file found in PR"
+            echo "Files in ./:"
+            ls -la ./
+            exit 1
+          fi
 
       # do not work, replace with the docker defined in grade-submission.yml
       # - name: Build grader image
@@ -94,8 +133,8 @@ jobs:
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           echo "Workspace to be created: $WORKSPACE"
           mkdir -p "$WORKSPACE"
-          # cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
-          cp "${{ steps.find.outputs.file }}" "$WORKSPACE/"
+          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          #cp "${{ steps.find.outputs.file }}" "$WORKSPACE/"
           
           # Verify permissions
           echo "Workspace: $WORKSPACE"
