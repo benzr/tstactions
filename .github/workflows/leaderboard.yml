@@ -87,6 +87,7 @@ jobs:
           echo "current dir: $(pwd)"
           echo "Files:"
           ls -la
+          cd  ${{ github.workspace }}
           cp evaluator.py docker/
           cp requirements.txt docker/
 
