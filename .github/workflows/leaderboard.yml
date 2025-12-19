@@ -1,8 +1,8 @@
-name: B
+name: Leaderboard
 
 on:
   workflow_run:
-    workflows: ["A"]
+    workflows: ["Submission"]
     types:
       - completed
 
