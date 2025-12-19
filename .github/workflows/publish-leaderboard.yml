@@ -94,7 +94,8 @@ jobs:
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           echo "Workspace to be created: $WORKSPACE"
           mkdir -p "$WORKSPACE"
-          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          # cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          cp "${{ steps.find.outputs.file }}" "$WORKSPACE/"
           
           # Verify permissions
           echo "Workspace: $WORKSPACE"
