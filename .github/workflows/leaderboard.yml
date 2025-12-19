@@ -67,11 +67,11 @@ jobs:
               console.log(`Artifact ${artifact.name} was published at ${publishTime}`);
 
               fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
-              
-              // echo "ARTIFACT_LOCATION=$(pwd)/api-downloaded-artifacts" >> $GITHUB_ENV
-              // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') + '/api-downloaded-artifacts');          }
-              core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.'));          }
             }
+            // echo "ARTIFACT_LOCATION=$(pwd)/api-downloaded-artifacts" >> $GITHUB_ENV
+            // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') + '/api-downloaded-artifacts');
+            // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') );
+            
 
       - name: Extract artifact
         run: |
