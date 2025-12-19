@@ -21,10 +21,14 @@ jobs:
           #path: ./student-submission
           path: .
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: main
+      # - name: Checkout repository
+      #   uses: actions/checkout@v4
+      #   with:
+      #     ref: main
+
+      - name: Get workflow outputs
+        run: |
+          echo "Submission path: ${{ github.event.workflow_run.outputs.submission_path }}"
 
       # Do not work , chatGPT always messed up with this part
       # - name: Find submission
