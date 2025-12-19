@@ -183,22 +183,42 @@ jobs:
             sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
           fi
 
-      - name: Upload graded result artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: graded-result-${{ github.event.pull_request.number }}
-          path: /tmp/grade_workspace/results.db
-          retention-days: 7
+      # - name: Upload graded result artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: graded-result-${{ github.event.pull_request.number }}
+      #     path: /tmp/grade_workspace/results.db
+      #     retention-days: 7
 
-      - name: Save comment metadata
-        run: |
-          echo "SCORE=${{ steps.evaluate.outputs.score }}" > comment-data.txt
-          echo "USERNAME=${{ steps.find-file.outputs.username }}" >> comment-data.txt
-          echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> comment-data.txt
+      # - name: Save comment metadata
+      #   run: |
+      #     echo "SCORE=${{ steps.evaluate.outputs.score }}" > comment-data.txt
+      #     echo "USERNAME=${{ steps.find-file.outputs.username }}" >> comment-data.txt
+      #     echo "PR_NUMBER=${{ github.event.pull_request.number }}" >> comment-data.txt
 
-      - name: Upload comment metadata
-        uses: actions/upload-artifact@v4
+      # - name: Upload comment metadata
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: comment-data
+      #     path: comment-data.txt
+      #     retention-days: 7
+
+      - name: Publish grade as check
+        uses: actions/github-script@v7
         with:
-          name: comment-data
-          path: comment-data.txt
-          retention-days: 7
+          script: |
+            const score = `${{ steps.evaluate.outputs.score }}`;
+            const username = `${{ steps.find-file.outputs.username }}`;
+
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: "Autograder",
+              head_sha: context.payload.pull_request.head.sha,
+              status: "completed",
+              conclusion: "success",
+              output: {
+                title: "Submission graded",
+                summary: `Student: ${username}\nScore: ${score}/100`
+              }
+            });

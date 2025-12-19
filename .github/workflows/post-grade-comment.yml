@@ -36,20 +36,43 @@ jobs:
               console.log(`- ${a.name} (expired: ${a.expired})`);
             }
 
-      - name: Download comment data
-        uses: actions/download-artifact@v4
+      # - name: Download comment data
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     run-id: ${{ github.event.workflow_run.id }}
+      #     name: comment-data
+
+      # - name: Load data
+      #   id: data
+      #   run: |
+      #     source comment-data.txt
+      #     echo "score=$SCORE" >> $GITHUB_OUTPUT
+      #     echo "username=$USERNAME" >> $GITHUB_OUTPUT
+      #     echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
+      - name: Read grading check
+        id: check
+        uses: actions/github-script@v7
         with:
-          run-id: ${{ github.event.workflow_run.id }}
-          name: "comment-data"
+          script: |
+            const sha = context.payload.workflow_run.head_sha;
 
-      - name: Load data
-        id: data
-        run: |
-          source comment-data.txt
-          echo "score=$SCORE" >> $GITHUB_OUTPUT
-          echo "username=$USERNAME" >> $GITHUB_OUTPUT
-          echo "pr=$PR_NUMBER" >> $GITHUB_OUTPUT
+            const checks = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha
+            });
 
+            const grader = checks.data.check_runs.find(
+              c => c.name === "Autograder"
+            );
+
+            if (!grader) {
+              core.setFailed("Autograder check not found");
+              return;
+            }
+
+            core.setOutput("summary", grader.output.summary);
+            
       - name: Post grade as PR comment
         uses: actions/github-script@v7
         with:
