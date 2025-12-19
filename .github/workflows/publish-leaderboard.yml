@@ -16,7 +16,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          #path: ./student-submission
+          path: .
+          
       # Do not work , chatGPT always messed up with this part
       # - name: Find submission
       #   id: find
