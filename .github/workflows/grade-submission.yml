@@ -203,7 +203,7 @@ jobs:
           name: graded-result-${{ github.event.pull_request.number }}
           path: /tmp/grade_workspace/results.db
           retention-days: 7
-          
+
       # - name: Upload grading artifact
       #   uses: actions/upload-artifact@v4
       #   with:
@@ -221,3 +221,22 @@ jobs:
             echo ""
             echo "_This run is a preview. Results are finalized after merge._"
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: Configure Git for push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.MERGE_TOKEN }}
+
+      - name: Cherry-pick student submission
+        run: |
+          # Copy ex1_*.py files from the PR workspace
+          cp $GITHUB_WORKSPACE/ex1_*.py .
+          git add ex1_*.py
+          git commit -m "Merge graded submission ex1_*.py from PR #${{ github.event.pull_request.number }}" || echo "No changes"
+          git push origin main
