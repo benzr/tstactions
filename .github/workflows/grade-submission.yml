@@ -177,12 +177,39 @@ jobs:
 
       #     echo "score=$SCORE" >> $GITHUB_OUTPUT
 
-      - name: Upload grading artifact
+      - name: Prepare artifact
+        run: |
+          # Create the expected /tmp/grade_workspace structure
+          mkdir -p /tmp/grade_workspace
+          
+          # Copy from ACTUAL location to /tmp for compatibility
+          ACTUAL_DB="$GITHUB_WORKSPACE/grade_workspace/results.db"
+          
+          if [ -f "$ACTUAL_DB" ]; then
+            echo "📁 Copying from: $ACTUAL_DB"
+            cp "$ACTUAL_DB" /tmp/grade_workspace/
+            echo "✅ Artifact prepared at /tmp/grade_workspace/results.db"
+          else
+            echo "⚠️ Database not found at: $ACTUAL_DB"
+            echo "📁 Searching for database..."
+            find "$GITHUB_WORKSPACE" -name "*.db" -type f | head -5
+            # Create empty DB as fallback
+            sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
+          fi
+
+      - name: Upload graded result artifact
         uses: actions/upload-artifact@v4
         with:
-          name: grading-result
-          path: work/results.db
+          name: graded-result-${{ github.event.pull_request.number }}
+          path: /tmp/grade_workspace/results.db
           retention-days: 7
+          
+      # - name: Upload grading artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: grading-result
+      #     path: work/results.db
+      #     retention-days: 7
 
       - name: Publish student feedback
         run: |
