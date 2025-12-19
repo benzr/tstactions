@@ -203,5 +203,5 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ex1_${{ github.actor }}
-          path: ex1_${{ github.actor }}.py
+            name: ex1_${{ steps.find-file.outputs.username }}
+            path: ${{ github.workspace }}/grade_workspace/${{ steps.find-file.outputs.file_basename }}
