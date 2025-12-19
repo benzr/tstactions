@@ -67,6 +67,9 @@ jobs:
               console.log(`Artifact ${artifact.name} was published at ${publishTime}`);
 
               fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
+              
+              # ✅ CRITICAL: Save the path for later use
+              echo "ARTIFACT_LOCATION=$(pwd)/api-downloaded-artifacts" >> $GITHUB_ENV
             }
 
       - name: Extract artifact
@@ -81,7 +84,13 @@ jobs:
             python "$file"
           done
 
+
       # now it becomes tricky, the Python files should be executed in docker with grading environment
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main  # Explicitly checkout main branch
+
       - name: Copy necessary files to docker folder
         run: |
           echo "Workspace: ${{ github.workspace }}"
