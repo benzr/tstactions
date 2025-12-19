@@ -84,6 +84,9 @@ jobs:
       # now it becomes tricky, the Python files should be executed in docker with grading environment
       - name: Copy necessary files to docker folder
         run: |
+          echo "current dir: $(pwd)"
+          echo "Files:"
+          ls -la
           cp evaluator.py docker/
           cp requirements.txt docker/
 
