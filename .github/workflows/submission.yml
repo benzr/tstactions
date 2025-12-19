@@ -204,4 +204,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ex1_${{ github.actor }}
-                path: ex1_${{ github.actor }}.py
+          path: ex1_${{ github.actor }}.py
