@@ -87,9 +87,9 @@ jobs:
           echo "current dir: $(pwd)"
           echo "Files:"
           ls -la
-          cd  ${{ github.workspace }}
           cp evaluator.py docker/
           cp requirements.txt docker/
+        working-directory: ${{ github.workspace }} 
 
       - name: Set up Docker Buildx with caching
         uses: docker/setup-buildx-action@v3
