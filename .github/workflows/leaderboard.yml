@@ -66,9 +66,6 @@ jobs:
               const publishTime = artifact.created_at; // Get the publish time of the artifact
               console.log(`Artifact ${artifact.name} was published at ${publishTime}`);
 
-              const uniqueId = context.payload.workflow_run.pull_requests[0].id; // Get the unique ID of the PR
-              console.log(`Unique ID of the PR: ${uniqueId}`);
-
               fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
             }
 
