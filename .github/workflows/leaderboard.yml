@@ -68,7 +68,6 @@ jobs:
 
               fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
               
-              # ✅ CRITICAL: Save the path for later use
               echo "ARTIFACT_LOCATION=$(pwd)/api-downloaded-artifacts" >> $GITHUB_ENV
             }
 
