@@ -3,7 +3,7 @@ name: Publish Leaderboard
 on:
   push:
     branches: [main]
-    
+
   workflow_dispatch:
 
 permissions:
@@ -26,36 +26,141 @@ jobs:
               USER="${USER%.py}"
               echo "file=$file" >> $GITHUB_OUTPUT
               echo "user=$USER" >> $GITHUB_OUTPUT
+              echo "Found submission: $file from $USER"
               break
             fi
           done
 
           [ -z "${{ steps.find.outputs.file }}" ] && exit 0
 
-      - name: Build grader image
+      # do not work, replace with the docker defined in grade-submission.yml
+      # - name: Build grader image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: ./docker
+      #     load: true
+      #     tags: sandbox-runner:latest
+
+      # - name: Run trusted grading
+      #   id: grade
+      #   run: |
+      #     mkdir -p work
+      #     cp "${{ steps.find.outputs.file }}" work/student.py
+
+      #     docker run --rm \
+      #       -v "$PWD/work:/data" \
+      #       sandbox-runner:latest \
+      #       /data/student.py \
+      #       "${{ steps.find.outputs.user }}"
+
+      #     SCORE=$(sqlite3 work/results.db \
+      #       "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" \
+      #       2>/dev/null || echo 0)
+
+      #     echo "score=$SCORE" >> $GITHUB_OUTPUT
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
         uses: docker/build-push-action@v5
         with:
           context: ./docker
-          load: true
           tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          load: true
 
-      - name: Run trusted grading
-        id: grade
+      - name: Move cache
         run: |
-          mkdir -p work
-          cp "${{ steps.find.outputs.file }}" work/student.py
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
 
-          docker run --rm \
-            -v "$PWD/work:/data" \
+      - name: Create temporary workspace
+        run: |
+          # Use workspace directory instead of /tmp
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          mkdir -p "$WORKSPACE"
+          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
+
+      - name: Debug before Docker run
+        run: |
+          echo "=== DEBUG VARIABLES ==="
+          echo "File output: ${{ steps.find-file.outputs.file }}"
+          echo "File basename: ${{ steps.find-file.outputs.file_basename }}"
+          echo "Username: ${{ steps.find-file.outputs.username }}"
+          
+          # Check if variables exist
+          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
+            echo "ERROR: file is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.file_basename }}" ]; then
+            echo "ERROR: file_basename is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.username }}" ]; then
+            echo "ERROR: username is EMPTY!"
+          fi
+          
+          echo "=== FILES ==="
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          ls -la "$WORKSPACE" || echo "No workspace"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          TEMP_DB="$WORKSPACE/results.db"
+          
+          # Create empty database
+          sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
+          
+          echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
+          echo "Database path: $TEMP_DB"
+          
+          # Run Docker with proper user mapping
+            echo "Docker command:"
+            echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+            
+            docker run \
+            --rm \
+            -v "$WORKSPACE:/data:rw" \
+            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
+            --user "root" \
             sandbox-runner:latest \
-            /data/student.py \
-            "${{ steps.find.outputs.user }}"
+            "/app/student_code.py" \
+            "${{ steps.find-file.outputs.username }}"
+          
+          # Check if DB was created
+          if [ -f "$TEMP_DB" ]; then
+            echo "Database created successfully"
+            ls -la "$TEMP_DB"
+            SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
+            echo "score=$SCORE" >> $GITHUB_OUTPUT
+            echo "Score: $SCORE"
+          else
+            echo "ERROR: Database not created!"
+            echo "Files in workspace:"
+            ls -la "$WORKSPACE"
+            echo "score=0" >> $GITHUB_OUTPUT
+          fi
 
-          SCORE=$(sqlite3 work/results.db \
-            "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" \
-            2>/dev/null || echo 0)
 
-          echo "score=$SCORE" >> $GITHUB_OUTPUT
 
       - name: Update leaderboard database
         run: |
