@@ -1,0 +1,21 @@
+name: B
+
+on:
+  workflow_run:
+    workflows: ["A"]
+    types:
+      - completed
+
+jobs:
+  consume:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ex1_bob
+
+      - name: Use the file
+        run: |
+          python ex1_bob.py
+          
