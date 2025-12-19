@@ -67,7 +67,10 @@ jobs:
             }
 
       - name: Extract artifact
-        run: unzip ex1_bob.zip
+        run: |
+          for artifact in ex1_*.zip; do
+            unzip "$artifact"
+          done
 
       - name: Use the files
         run: |
