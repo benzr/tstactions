@@ -186,6 +186,7 @@ jobs:
               --rm \
               -v "$WORKSPACE:/data:rw" \
               -v "$WORKSPACE/student_code.py:/app/student_code.py:ro" \
+              -v "$TEMP_DB:/app/results.db:rw" \
               --user "root" \
               sandbox-runner:latest \
               "/app/student_code.py" "$TEMP_DB" "$GITHUB_USERNAME"

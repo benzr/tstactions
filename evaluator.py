@@ -121,11 +121,12 @@ def main():
         sys.exit(1)
     
     file_path = sys.argv[1]
-    database_path = sys.argv[2]
+    database_path_github = sys.argv[2]
     github_username = sys.argv[3]
+    database_path = "/app/results.db"
 
     print (f'file_path: {file_path}')
-    print (f"Using database at: {database_path}")
+    print (f"Using database at: {database_path_github}, local: {database_path}  ")
     print (f'github_username: {github_username}')
 
     
