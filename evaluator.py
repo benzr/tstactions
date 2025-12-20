@@ -115,13 +115,14 @@ def evaluate_submission(file_path, github_username):
     return score
 
 def main():
-    if len(sys.argv) != 3:
-        print("ERROR: Usage: python evaluator.py <submission_file> <github_username>")
+    if len(sys.argv) != 4:
+        print("ERROR: Usage: python evaluator.py <submission_file> <database> <github_username>")
         print(f"Got {len(sys.argv)-1} args: {sys.argv[1:]}")
         sys.exit(1)
     
     file_path = sys.argv[1]
-    github_username = sys.argv[2]
+    database_path = sys.argv[2]
+    github_username = sys.argv[3]
     
     if not Path(file_path).exists():
         print(f"ERROR: File not found: {file_path}")

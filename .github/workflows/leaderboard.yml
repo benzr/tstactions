@@ -167,6 +167,7 @@ jobs:
         id: evaluate
         run: |
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          GITHUB_USERNAME="${{ steps.download-artifact.outputs.github_username }}"
           
           for file in ex1_*.py; do
             TEMP_DB="$WORKSPACE/results_$(basename "$file" .py).db"
@@ -184,7 +185,7 @@ jobs:
               -v "$WORKSPACE/$file:/app/student_code.py:ro" \
               --user "root" \
               sandbox-runner:latest \
-              "/app/student_code.py" "bntzr"
+              "/app/student_code.py" "$TEMP_DB" "$GITHUB_USERNAME"
             
             # Check if DB was created
             if [ -f "$TEMP_DB" ]; then
