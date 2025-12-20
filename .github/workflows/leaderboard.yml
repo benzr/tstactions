@@ -90,8 +90,10 @@ jobs:
         run: |
           for file in ex1_*.py; do
             python "$file"
+            cp "$file" /tmp/
           done
-          echo "GitHub WORKSPACE: $GITHUB_WORKSPACE"
+          echo "Files copied to /tmp/:"
+          ls -la /tmp/
 
       # now it becomes tricky, the Python files should be executed in docker with grading environment
 
@@ -137,16 +139,23 @@ jobs:
       - name: Create temporary workspace
         run: |
           # Use workspace directory instead of /tmp
-          echo "GitHub WORKSPACE: $GITHUB_WORKSPACE"
+          echo "/tmp content"
+          ls -la /tmp
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
-          artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
-          ls -la "$artifact_path"
-          echo "Copying files from $artifact_path to $WORKSPACE"
-          for file in "${artifact_path}/ex1_*.py"; do
+          echo "Copying files from /tmp to workspace: $WORKSPACE"
+          for file in /tmp/ex1_*.py; do
             echo $file
             cp "$file" "$WORKSPACE/"
           done
+
+          # artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
+          # ls -la "$artifact_path"
+          # echo "Copying files from $artifact_path to $WORKSPACE"
+          # for file in "${artifact_path}/ex1_*.py"; do
+          #   echo $file
+          #   cp "$file" "$WORKSPACE/"
+          # done
           # Verify permissions
           echo "Workspace: $WORKSPACE"
           ls -la "$WORKSPACE"
