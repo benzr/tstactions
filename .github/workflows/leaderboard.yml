@@ -167,10 +167,11 @@ jobs:
         id: evaluate
         run: |
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
-          GITHUB_USERNAME="${{ steps.download-artifact.outputs.github_username }}"
+          
           
           for file in ex1_*.py; do
             TEMP_DB="$WORKSPACE/results_$(basename "$file" .py).db"
+            GITHUB_USERNAME=$(basename "$file" .py | sed 's/ex1_//')     
             
             # Create empty database
             sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
