@@ -140,6 +140,8 @@ jobs:
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
           artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
+          ls -la "$artifact_path"
+          echo "Copying files from $artifact_path to $WORKSPACE"
           for file in "${artifact_path}/ex1_*.py"; do
             echo $file
             cp "$file" "$WORKSPACE/"
