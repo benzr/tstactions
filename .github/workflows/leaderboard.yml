@@ -132,8 +132,9 @@ jobs:
           # Use workspace directory instead of /tmp
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
-          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
-          
+          for file in ex1_*.py; do
+            cp "$file" "$WORKSPACE/"
+          done
           # Verify permissions
           echo "Workspace: $WORKSPACE"
           ls -la "$WORKSPACE"
