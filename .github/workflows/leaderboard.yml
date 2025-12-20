@@ -69,16 +69,12 @@ jobs:
 
               fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
             }
-            // echo "ARTIFACT_LOCATION=$(pwd)/api-downloaded-artifacts" >> $GITHUB_ENV
-            // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') + '/api-downloaded-artifacts');
-            // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') );
-            artifactLocation = require('path').resolve('.');
-            core.setOutput('ARTIFACT_LOCATION', artifactLocation);
-            console.log(`Artifacts downloaded to ${artifactLocation}`);
-
             const { execSync } = require('child_process');
             const output = execSync('ls -la', { encoding: 'utf-8' });
             console.log('Current directory contents:\n' + output);
+
+            core.setOutput('github_username', context.actor);
+            console.log(`GitHub username: ${context.actor}`);
 
       - name: Extract artifact
         run: |
@@ -88,12 +84,13 @@ jobs:
 
       - name: Use the files
         run: |
+          mkdir -p /tmp/grade_workspace
           for file in ex1_*.py; do
             python "$file"
-            cp "$file" /tmp/
+            cp "$file" /tmp/grade_workspace
           done
-          echo "Files copied to /tmp/:"
-          ls -la /tmp/
+          echo "Files copied to /tmp/grade_workspace/ :"
+          ls -la /tmp/grade_workspace
 
       # now it becomes tricky, the Python files should be executed in docker with grading environment
 
@@ -139,23 +136,15 @@ jobs:
       - name: Create temporary workspace
         run: |
           # Use workspace directory instead of /tmp
-          echo "/tmp content"
-          ls -la /tmp
+          echo "/tmp/grade_workspace content"
+          ls -la /tmp/grade_workspace
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
           echo "Copying files from /tmp to workspace: $WORKSPACE"
-          for file in /tmp/ex1_*.py; do
+          for file in /tmp/grade_workspace/ex1_*.py; do
             echo $file
             cp "$file" "$WORKSPACE/"
           done
-
-          # artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
-          # ls -la "$artifact_path"
-          # echo "Copying files from $artifact_path to $WORKSPACE"
-          # for file in "${artifact_path}/ex1_*.py"; do
-          #   echo $file
-          #   cp "$file" "$WORKSPACE/"
-          # done
           # Verify permissions
           echo "Workspace: $WORKSPACE"
           ls -la "$WORKSPACE"
@@ -163,18 +152,10 @@ jobs:
       - name: Debug before Docker run
         run: |
           echo "=== DEBUG VARIABLES ==="
-          echo "File output: ${{ steps.find-file.outputs.file }}"
-          echo "File basename: ${{ steps.find-file.outputs.file_basename }}"
-          echo "Username: ${{ steps.find-file.outputs.username }}"
+          echo "Username: ${{ steps.download-artifact.outputs.github_username }}"
           
           # Check if variables exist
-          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
-            echo "ERROR: file is EMPTY!"
-          fi
-          if [ -z "${{ steps.find-file.outputs.file_basename }}" ]; then
-            echo "ERROR: file_basename is EMPTY!"
-          fi
-          if [ -z "${{ steps.find-file.outputs.username }}" ]; then
+          if [ -z "${{ steps.download-artifact.outputs.github_username }}" ]; then
             echo "ERROR: username is EMPTY!"
           fi
           
@@ -203,7 +184,7 @@ jobs:
               -v "$WORKSPACE/$file:/app/student_code.py:ro" \
               --user "root" \
               sandbox-runner:latest \
-              "/app/student_code.py"
+              "/app/student_code.py" "bntzr"
             
             # Check if DB was created
             if [ -f "$TEMP_DB" ]; then
