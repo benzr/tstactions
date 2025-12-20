@@ -172,6 +172,7 @@ jobs:
           for file in ${WORKSPACE}/ex1_*.py; do
             GITHUB_USERNAME=$(basename "$file" .py | sed 's/ex1_//')     
             TEMP_DB="$WORKSPACE/results_${GITHUB_USERNAME}.db"
+            cp $file "$WORKSPACE/student_code.py"
 
             # Create empty database
             sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
@@ -184,7 +185,7 @@ jobs:
             docker run \
               --rm \
               -v "$WORKSPACE:/data:rw" \
-              -v "$WORKSPACE/$file:/app/student_code.py:ro" \
+              -v "$WORKSPACE/student_code.py:/app/student_code.py:ro" \
               --user "root" \
               sandbox-runner:latest \
               "/app/student_code.py" "$TEMP_DB" "$GITHUB_USERNAME"
