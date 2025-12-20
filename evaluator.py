@@ -123,6 +123,11 @@ def main():
     file_path = sys.argv[1]
     database_path = sys.argv[2]
     github_username = sys.argv[3]
+
+    print (f'file_path: {file_path}')
+    print (f"Using database at: {database_path}")
+    print (f'github_username: {github_username}')
+
     
     if not Path(file_path).exists():
         print(f"ERROR: File not found: {file_path}")
