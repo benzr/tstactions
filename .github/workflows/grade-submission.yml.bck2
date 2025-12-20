@@ -1,0 +1,245 @@
+name: Grade Submission
+
+on:
+  pull_request:
+    paths: ['ex1_*.py']
+
+permissions:
+  contents: read
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+
+    outputs:
+      submission_path: ${{ steps.find-file.outputs.file }}
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          #path: ./student-submission
+          path: .
+
+      - name: Debug - List student files
+        run: |
+          echo "=== Student submission directory ==="
+          #cd student-submission && ls -la
+          ls -la
+          echo "=== Looking for ex1 files ==="
+          #cd student-submission && find . -name "ex1_*.py" -type f
+          find . -name "ex1_*.py" -type f
+
+      - name: Find student submission
+        id: find-file
+        run: |
+          FOUND_FILE=""
+          FOUND_USERNAME=""
+          #cd student-submission
+          for file in ex1_*.py; do
+            if [ -f "$file" ]; then
+              FOUND_FILE="$file"
+              USERNAME="${file#ex1_}"
+              USERNAME="${USERNAME%.py}"
+              FOUND_USERNAME="$USERNAME"
+              echo "file=$file" >> $GITHUB_OUTPUT
+              echo "username=$USERNAME" >> $GITHUB_OUTPUT
+              echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
+              echo "Found submission: $file from $USERNAME"
+              # Copy to workspace root for Docker
+              cp "$file" ../
+              break
+            fi
+          done
+          
+          if [ -z "$FOUND_FILE" ]; then
+            echo "ERROR: No valid ex1_*.py file found in PR"
+            echo "Files in ./:"
+            ls -la ./
+            exit 1
+          fi
+
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+      - name: Create temporary workspace
+        run: |
+          # Use workspace directory instead of /tmp
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          mkdir -p "$WORKSPACE"
+          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
+
+      - name: Debug before Docker run
+        run: |
+          echo "=== DEBUG VARIABLES ==="
+          echo "File output: ${{ steps.find-file.outputs.file }}"
+          echo "File basename: ${{ steps.find-file.outputs.file_basename }}"
+          echo "Username: ${{ steps.find-file.outputs.username }}"
+          
+          # Check if variables exist
+          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
+            echo "ERROR: file is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.file_basename }}" ]; then
+            echo "ERROR: file_basename is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.username }}" ]; then
+            echo "ERROR: username is EMPTY!"
+          fi
+          
+          echo "=== FILES ==="
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          ls -la "$WORKSPACE" || echo "No workspace"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          TEMP_DB="$WORKSPACE/results.db"
+          
+          # Create empty database
+          sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
+          
+          echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
+          echo "Database path: $TEMP_DB"
+          
+          # Run Docker with proper user mapping
+            echo "Docker command:"
+            echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+            
+            docker run \
+            --rm \
+            -v "$WORKSPACE:/data:rw" \
+            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
+            --user "root" \
+            sandbox-runner:latest \
+            "/app/student_code.py" \
+            "${{ steps.find-file.outputs.username }}"
+          
+          # Check if DB was created
+          if [ -f "$TEMP_DB" ]; then
+            echo "Database created successfully"
+            ls -la "$TEMP_DB"
+            SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
+            echo "score=$SCORE" >> $GITHUB_OUTPUT
+            echo "Score: $SCORE"
+          else
+            echo "ERROR: Database not created!"
+            echo "Files in workspace:"
+            ls -la "$WORKSPACE"
+            echo "score=0" >> $GITHUB_OUTPUT
+          fi
+
+      # - name: Run evaluation
+      #   id: grade
+      #   run: |
+      #     mkdir -p work
+      #     cp "${{ steps.find.outputs.file }}" work/student.py
+
+      #     docker run --rm \
+      #       -v "$PWD/work:/data" \
+      #       sandbox-runner:latest \
+      #       /data/student.py \
+      #       "${{ steps.find.outputs.user }}"
+
+      #     SCORE=$(sqlite3 work/results.db \
+      #       "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" \
+      #       2>/dev/null || echo 0)
+
+      #     echo "score=$SCORE" >> $GITHUB_OUTPUT
+
+      - name: Prepare artifact
+        run: |
+          # Create the expected /tmp/grade_workspace structure
+          mkdir -p /tmp/grade_workspace
+          
+          # Copy from ACTUAL location to /tmp for compatibility
+          ACTUAL_DB="$GITHUB_WORKSPACE/grade_workspace/results.db"
+          
+          if [ -f "$ACTUAL_DB" ]; then
+            echo "📁 Copying from: $ACTUAL_DB"
+            cp "$ACTUAL_DB" /tmp/grade_workspace/
+            echo "✅ Artifact prepared at /tmp/grade_workspace/results.db"
+          else
+            echo "⚠️ Database not found at: $ACTUAL_DB"
+            echo "📁 Searching for database..."
+            find "$GITHUB_WORKSPACE" -name "*.db" -type f | head -5
+            # Create empty DB as fallback
+            sqlite3 /tmp/grade_workspace/results.db "VACUUM;"
+          fi
+
+      - name: Upload graded result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: graded-result-${{ github.event.pull_request.number }}
+          path: /tmp/grade_workspace/results.db
+          retention-days: 7
+
+      # - name: Upload grading artifact
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: grading-result
+      #     path: work/results.db
+      #     retention-days: 7
+
+      - name: Publish student feedback
+        run: |
+          {
+            echo "## 🎯 Submission Graded"
+            echo ""
+            echo "**Student:** ${{ steps.find.outputs.user }}"
+            echo "**Score:** ${{ steps.grade.outputs.score }}/100"
+            echo ""
+            echo "_This run is a preview. Results are finalized after merge._"
+          } >> $GITHUB_STEP_SUMMARY
+
+      # - name: Configure Git for push
+      #   run: |
+      #     git config user.name "github-actions"
+      #     git config user.email "github-actions@github.com"
+
+      # - name: Checkout main branch
+      #   uses: actions/checkout@v4
+      #   with:
+      #     ref: main
+      #     token: ${{ secrets.MERGE_TOKEN }}
+
+      # - name: Cherry-pick student submission
+      #   run: |
+      #     # Copy ex1_*.py files from the PR workspace
+      #     cp $GITHUB_WORKSPACE/ex1_*.py .
+      #     git add ex1_*.py
+      #     git commit -m "Merge graded submission ex1_*.py from PR #${{ github.event.pull_request.number }}" || echo "No changes"
+      #     git push origin main

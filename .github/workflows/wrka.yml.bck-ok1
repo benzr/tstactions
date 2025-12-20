@@ -1,0 +1,20 @@
+name: A
+
+on:
+  pull_request:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate ex1_bob.py
+        run: |
+          echo "print('hello from PR')" > ex1_bob.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ex1_bob
+          path: ex1_bob.py

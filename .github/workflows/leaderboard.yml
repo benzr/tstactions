@@ -1,0 +1,199 @@
+name: Leaderboard
+
+on:
+  workflow_run:
+    workflows: ["Submission"]
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  consume:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug  list artifacts for triggering run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = context.payload.workflow_run.id;
+
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+
+            console.log(`Found ${artifacts.data.artifacts.length} artifacts`);
+            for (const a of artifacts.data.artifacts) {
+              console.log(`- ${a.name} (expired: ${a.expired})`);
+            }
+
+      # - name: Download artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: ex1_bob
+      #     run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Download artifact via API
+        id: download-artifact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = context.payload.workflow_run.id;
+
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+
+            const artifacts_to_download = artifacts.data.artifacts.filter(a => a.name.startsWith("ex1_"));
+            if (artifacts_to_download.length === 0) {
+              throw new Error("No artifacts found starting with ex1_");
+            }
+
+            const fs = require("fs");
+            for (const artifact of artifacts_to_download) {
+              const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: artifact.id,
+              archive_format: "zip",
+              });
+
+              const publishTime = artifact.created_at; // Get the publish time of the artifact
+              console.log(`Artifact ${artifact.name} was published at ${publishTime}`);
+
+              fs.writeFileSync(`${artifact.name}.zip`, Buffer.from(download.data));
+            }
+            const { execSync } = require('child_process');
+            const output = execSync('ls -la', { encoding: 'utf-8' });
+            console.log('Current directory contents:\n' + output);
+
+            core.setOutput('github_username', context.actor);
+            console.log(`GitHub username: ${context.actor}`);
+
+      - name: Extract artifact
+        run: |
+          for artifact in ex1_*.zip; do
+            unzip "$artifact"
+          done
+
+      - name: Use the files
+        run: |
+          mkdir -p /tmp/grade_workspace
+          for file in ex1_*.py; do
+            python "$file"
+            cp "$file" /tmp/grade_workspace
+          done
+          echo "Files copied to /tmp/grade_workspace/ :"
+          ls -la /tmp/grade_workspace
+
+      # now it becomes tricky, the Python files should be executed in docker with grading environment
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main  # Explicitly checkout main branch
+
+      - name: Copy necessary files to docker folder
+        run: |
+          echo "Workspace: ${{ github.workspace }}"
+          echo "current dir: $(pwd)"
+          echo "Files:"
+          ls -la
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+        working-directory: ${{ github.workspace }} 
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+      - name: Create temporary workspace
+        run: |
+          # Use workspace directory instead of /tmp
+          echo "/tmp/grade_workspace content"
+          ls -la /tmp/grade_workspace
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          mkdir -p "$WORKSPACE"
+          echo "Copying files from /tmp to workspace: $WORKSPACE"
+          for file in /tmp/grade_workspace/ex1_*.py; do
+            echo $file
+            cp "$file" "$WORKSPACE/"
+          done
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
+
+      - name: Debug before Docker run
+        run: |
+          echo "=== DEBUG VARIABLES ==="
+          echo "Username: ${{ steps.download-artifact.outputs.github_username }}"
+          
+          # Check if variables exist
+          if [ -z "${{ steps.download-artifact.outputs.github_username }}" ]; then
+            echo "ERROR: username is EMPTY!"
+          fi
+          
+          echo "=== FILES ==="
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          ls -la "$WORKSPACE" || echo "No workspace"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          
+          for file in ex1_*.py; do
+            TEMP_DB="$WORKSPACE/results_$(basename "$file" .py).db"
+            
+            # Create empty database
+            sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
+            
+            echo "Running evaluation for $file"
+            echo "Database path: $TEMP_DB"
+            
+            # Run Docker with proper user mapping
+            docker run \
+              --rm \
+              -v "$WORKSPACE:/data:rw" \
+              -v "$WORKSPACE/$file:/app/student_code.py:ro" \
+              --user "root" \
+              sandbox-runner:latest \
+              "/app/student_code.py" "bntzr"
+            
+            # Check if DB was created
+            if [ -f "$TEMP_DB" ]; then
+              echo "Database created successfully for $file"
+              SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
+              echo "Score for $file: $SCORE"
+            else
+              echo "ERROR: Database not created for $file!"
+            fi
+          done
+
+

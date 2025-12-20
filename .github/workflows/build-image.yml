@@ -22,7 +22,7 @@ jobs:
           docker builder prune -af
           rm -rf /tmp/.buildx-cache || true
 
-      - name: Copy evaluator.py to docker folder
+      - name: Copy necessary files to docker folder
         run: |
           cp evaluator.py docker/
           cp requirements.txt docker/

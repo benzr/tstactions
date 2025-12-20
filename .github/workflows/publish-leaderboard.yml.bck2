@@ -1,0 +1,261 @@
+name: Publish Leaderboard
+
+on:
+  push:
+    branches: [main]
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  leaderboard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          #path: ./student-submission
+          path: .
+
+      # - name: Checkout repository
+      #   uses: actions/checkout@v4
+      #   with:
+      #     ref: main
+
+      - name: Get workflow outputs
+        run: |
+          echo "Submission path: ${{ github.event.workflow_run.outputs.submission_path }}"
+
+      # Do not work , chatGPT always messed up with this part
+      # - name: Find submission
+      #   id: find
+      #   run: |
+      #     for file in ex1_*.py; do
+      #       if [ -f "$file" ]; then
+      #         USER="${file#ex1_}"
+      #         USER="${USER%.py}"
+      #         echo "file=$file" >> $GITHUB_OUTPUT
+      #         echo "user=$USER" >> $GITHUB_OUTPUT
+      #         echo "Found submission: $file from $USER"
+      #         break
+      #       fi
+      #     done
+
+      #     [ -z "${{ steps.find.outputs.file }}" ] && exit 0
+
+      - name: Debug - List student files
+        run: |
+          echo "=== Student submission directory ==="
+          #cd student-submission && ls -la
+          ls -la
+          echo "=== Looking for ex1 files ==="
+          #cd student-submission && find . -name "ex1_*.py" -type f
+          find . -name "ex1_*.py" -type f
+
+      - name: Find student submission
+        id: find-file
+        run: |
+          FOUND_FILE=""
+          FOUND_USERNAME=""
+          #cd student-submission
+          for file in ex1_*.py; do
+            if [ -f "$file" ]; then
+              FOUND_FILE="$file"
+              USERNAME="${file#ex1_}"
+              USERNAME="${USERNAME%.py}"
+              FOUND_USERNAME="$USERNAME"
+              echo "file=$file" >> $GITHUB_OUTPUT
+              echo "username=$USERNAME" >> $GITHUB_OUTPUT
+              echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
+              echo "Found submission: $file from $USERNAME"
+              # Copy to workspace root for Docker
+              cp "$file" ../
+              break
+            fi
+          done
+          
+          if [ -z "$FOUND_FILE" ]; then
+            echo "ERROR: No valid ex1_*.py file found in PR"
+            echo "Files in ./:"
+            ls -la ./
+            exit 1
+          fi
+
+      # do not work, replace with the docker defined in grade-submission.yml
+      # - name: Build grader image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: ./docker
+      #     load: true
+      #     tags: sandbox-runner:latest
+
+      # - name: Run trusted grading
+      #   id: grade
+      #   run: |
+      #     mkdir -p work
+      #     cp "${{ steps.find.outputs.file }}" work/student.py
+
+      #     docker run --rm \
+      #       -v "$PWD/work:/data" \
+      #       sandbox-runner:latest \
+      #       /data/student.py \
+      #       "${{ steps.find.outputs.user }}"
+
+      #     SCORE=$(sqlite3 work/results.db \
+      #       "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" \
+      #       2>/dev/null || echo 0)
+
+      #     echo "score=$SCORE" >> $GITHUB_OUTPUT
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+      - name: Create temporary workspace
+        run: |
+          # Use workspace directory instead of /tmp
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          echo "Workspace to be created: $WORKSPACE"
+          mkdir -p "$WORKSPACE"
+          cp "${{ steps.find-file.outputs.file }}" "$WORKSPACE/"
+          #cp "${{ steps.find.outputs.file }}" "$WORKSPACE/"
+          
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
+
+      - name: Debug before Docker run
+        run: |
+          echo "=== DEBUG VARIABLES ==="
+          echo "File output: ${{ steps.find-file.outputs.file }}"
+          echo "File basename: ${{ steps.find-file.outputs.file_basename }}"
+          echo "Username: ${{ steps.find-file.outputs.username }}"
+          
+          # Check if variables exist
+          if [ -z "${{ steps.find-file.outputs.file }}" ]; then
+            echo "ERROR: file is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.file_basename }}" ]; then
+            echo "ERROR: file_basename is EMPTY!"
+          fi
+          if [ -z "${{ steps.find-file.outputs.username }}" ]; then
+            echo "ERROR: username is EMPTY!"
+          fi
+          
+          echo "=== FILES ==="
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          ls -la "$WORKSPACE" || echo "No workspace"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          TEMP_DB="$WORKSPACE/results.db"
+          
+          # Create empty database
+          sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
+          
+          echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
+          echo "Database path: $TEMP_DB"
+          
+          # Run Docker with proper user mapping
+            echo "Docker command:"
+            echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+            
+            docker run \
+            --rm \
+            -v "$WORKSPACE:/data:rw" \
+            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
+            --user "root" \
+            sandbox-runner:latest \
+            "/app/student_code.py" \
+            "${{ steps.find-file.outputs.username }}"
+          
+          # Check if DB was created
+          if [ -f "$TEMP_DB" ]; then
+            echo "Database created successfully"
+            ls -la "$TEMP_DB"
+            SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
+            echo "score=$SCORE" >> $GITHUB_OUTPUT
+            echo "Score: $SCORE"
+          else
+            echo "ERROR: Database not created!"
+            echo "Files in workspace:"
+            ls -la "$WORKSPACE"
+            echo "score=0" >> $GITHUB_OUTPUT
+          fi
+
+
+
+      - name: Update leaderboard database
+        run: |
+          mkdir -p leaderboard
+
+          sqlite3 leaderboard/results.db <<EOF
+          CREATE TABLE IF NOT EXISTS results (
+            user TEXT PRIMARY KEY,
+            score INTEGER,
+            updated_at TEXT
+          );
+
+          INSERT OR REPLACE INTO results
+          VALUES (
+            '${{ steps.find.outputs.user }}',
+            ${{ steps.grade.outputs.score }},
+            datetime('now')
+          );
+          EOF
+
+      - name: Commit leaderboard data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add leaderboard/results.db
+          git commit -m "Update grade for ${{ steps.find.outputs.user }}" || exit 0
+          git push
+
+      - name: Build leaderboard page
+        run: |
+          mkdir -p public
+          sqlite3 leaderboard/results.db <<EOF
+          .mode html
+          .output public/index.html
+          SELECT user, score, updated_at
+          FROM results
+          ORDER BY score DESC;
+          EOF
+
+      - name: Publish to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public

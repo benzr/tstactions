@@ -129,7 +129,12 @@ def main():
     
     try:
         score = evaluate_submission(file_path, github_username)
-        sys.exit(0 if score > 0 else 1)
+        if score >= 0:
+            print("Evaluation succeeded.")
+            sys.exit(0)
+        else:
+            print("ERROR: Evaluation failed with negative score.")
+            sys.exit(1)
     except Exception as e:
         print(f"ERROR in evaluation: {type(e).__name__}: {e}")
         sys.exit(1)
