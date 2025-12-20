@@ -140,8 +140,9 @@ jobs:
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
           artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
-          for file in ex1_*.py; do
-            cp "${artifact_path}/$file" "$WORKSPACE/"
+          for file in "${artifact_path}/ex1_*.py"; do
+            echo $file
+            cp "$file" "$WORKSPACE/"
           done
           # Verify permissions
           echo "Workspace: $WORKSPACE"
