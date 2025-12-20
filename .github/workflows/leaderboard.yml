@@ -38,6 +38,7 @@ jobs:
       #     run-id: ${{ github.event.workflow_run.id }}
 
       - name: Download artifact via API
+        id: download-artifact
         uses: actions/github-script@v7
         with:
           script: |
@@ -71,7 +72,9 @@ jobs:
             // echo "ARTIFACT_LOCATION=$(pwd)/api-downloaded-artifacts" >> $GITHUB_ENV
             // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') + '/api-downloaded-artifacts');
             // core.exportVariable('ARTIFACT_LOCATION', require('path').resolve('.') );
-            
+            artifactLocation = require('path').resolve('.');
+            core.setOutput('ARTIFACT_LOCATION', artifactLocation);
+            console.log(`Artifacts downloaded to ${artifactLocation}`);
 
       - name: Extract artifact
         run: |
@@ -132,8 +135,9 @@ jobs:
           # Use workspace directory instead of /tmp
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
+          artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
           for file in ex1_*.py; do
-            cp "$file" "$WORKSPACE/"
+            cp "${artifact_path}/$file" "$WORKSPACE/"
           done
           # Verify permissions
           echo "Workspace: $WORKSPACE"
