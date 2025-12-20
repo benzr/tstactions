@@ -76,6 +76,10 @@ jobs:
             core.setOutput('ARTIFACT_LOCATION', artifactLocation);
             console.log(`Artifacts downloaded to ${artifactLocation}`);
 
+            const { execSync } = require('child_process');
+            const output = execSync('ls -la', { encoding: 'utf-8' });
+            console.log('Current directory contents:\n' + output);
+
       - name: Extract artifact
         run: |
           for artifact in ex1_*.zip; do
