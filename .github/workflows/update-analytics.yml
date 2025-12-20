@@ -1,0 +1,229 @@
+name: Update Analytics
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  # You could also trigger on other events like push to main
+
+jobs:
+  update-analytics:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: analytics-database
+          path: data/
+        continue-on-error: true  # Continue if no artifact exists
+
+      - name: Check if database exists
+        id: check-db
+        run: |
+          if [ -f data/analytics.db ]; then
+            echo "database_exists=true" >> $GITHUB_OUTPUT
+            echo "Using existing database"
+          else
+            echo "database_exists=false" >> $GITHUB_OUTPUT
+            echo "ERROR: No database found!"
+            echo "Please run the 'Initialize Database' workflow first."
+            exit 1
+          fi
+
+      - name: Update database with sample analytics
+        if: steps.check-db.outputs.database_exists == 'true'
+        run: |
+          # Install sqlite3 if needed
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+
+          # Simulate adding analytics data
+          # In real use, you'd parse actual analytics logs or use an API
+          TODAY=$(date +%Y-%m-%d)
+          
+          sqlite3 data/analytics.db "
+            -- Update metadata
+            INSERT OR REPLACE INTO metadata (key, value) VALUES 
+              ('last_updated', datetime('now')),
+              ('last_run_id', '${{ github.run_id }}');
+            
+            -- Add or update today's page views (example data)
+            INSERT INTO page_views (date, page_path, view_count, unique_visitors)
+            VALUES 
+              ('$TODAY', '/index.html', 100, 45),
+              ('$TODAY', '/about.html', 50, 30),
+              ('$TODAY', '/contact.html', 25, 15)
+            ON CONFLICT(date, page_path) DO UPDATE SET
+              view_count = view_count + excluded.view_count,
+              unique_visitors = MAX(unique_visitors, excluded.unique_visitors),
+              last_updated = CURRENT_TIMESTAMP;
+            
+            -- Also add some historical data for demo
+            INSERT OR IGNORE INTO page_views (date, page_path, view_count)
+            VALUES 
+              (date('now', '-1 day'), '/index.html', 95),
+              (date('now', '-2 days'), '/index.html', 87);
+          "
+          
+          echo "Database updated!"
+
+      - name: Generate HTML report
+        if: steps.check-db.outputs.database_exists == 'true'
+        run: |
+          mkdir -p docs
+          
+          # Create a detailed HTML report
+          cat > docs/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Analytics Dashboard</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  .container { max-width: 1000px; margin: 0 auto; }
+                  h1 { color: #333; }
+                  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 30px 0; }
+                  .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; }
+                  .stat-value { font-size: 2em; font-weight: bold; color: #007bff; }
+                  .stat-label { color: #666; margin-top: 5px; }
+                  table { width: 100%; border-collapse: collapse; margin-top: 30px; }
+                  th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+                  th { background-color: #007bff; color: white; }
+                  tr:hover { background-color: #f5f5f5; }
+                  canvas { margin-top: 40px; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>📊 Analytics Dashboard</h1>
+                  <p>Last updated: <span id="update-time">Loading...</span></p>
+          EOF
+          
+          # Extract data from SQLite and embed in HTML
+          sqlite3 data/analytics.db >> docs/index.html << 'EOF'
+            .mode html
+            SELECT '<div class="stats-grid">';
+            SELECT '<div class="stat-card">';
+            SELECT '<div class="stat-value">' || SUM(view_count) || '</div>';
+            SELECT '<div class="stat-label">Total Views</div>';
+            SELECT '</div>';
+            
+            SELECT '<div class="stat-card">';
+            SELECT '<div class="stat-value">' || COUNT(DISTINCT page_path) || '</div>';
+            SELECT '<div class="stat-label">Pages Tracked</div>';
+            SELECT '</div>';
+            
+            SELECT '<div class="stat-card">';
+            SELECT '<div class="stat-value">' || (SELECT COUNT(DISTINCT date) FROM page_views) || '</div>';
+            SELECT '<div class="stat-label">Days of Data</div>';
+            SELECT '</div>';
+            
+            SELECT '<div class="stat-card">';
+            SELECT '<div class="stat-value">' || COALESCE((SELECT value FROM metadata WHERE key='database_version'), '1.0') || '</div>';
+            SELECT '<div class="stat-label">Database Version</div>';
+            SELECT '</div>';
+            SELECT '</div>';
+            
+            SELECT '<h2>Recent Page Views</h2>';
+            SELECT '<table><thead><tr><th>Date</th><th>Page</th><th>Views</th><th>Unique Visitors</th><th>Last Updated</th></tr></thead><tbody>';
+            SELECT '<tr><td>' || date || '</td><td>' || page_path || '</td><td>' || view_count || '</td><td>' || unique_visitors || '</td><td>' || last_updated || '</td></tr>' 
+            FROM page_views 
+            ORDER BY date DESC, page_path 
+            LIMIT 20;
+            SELECT '</tbody></table>';
+            
+            -- JSON data for Chart.js
+            SELECT '<script>';
+            SELECT 'const chartData = {';
+            SELECT '  labels: [';
+            SELECT '    "' || GROUP_CONCAT(date, '","') || '"' 
+            FROM (SELECT DISTINCT date FROM page_views ORDER BY date DESC LIMIT 7);
+            SELECT '  ],';
+            SELECT '  datasets: [{';
+            SELECT '    label: "Page Views",';
+            SELECT '    data: [';
+            SELECT '      ' || GROUP_CONCAT(view_count, ',') 
+            FROM (SELECT SUM(view_count) as view_count FROM page_views GROUP BY date ORDER BY date DESC LIMIT 7);
+            SELECT '    ],';
+            SELECT '    borderColor: "#007bff",';
+            SELECT '    backgroundColor: "rgba(0, 123, 255, 0.1)"';
+            SELECT '  }]';
+            SELECT '};';
+          EOF
+          
+          # Close HTML and add JavaScript
+          cat >> docs/index.html << 'EOF'
+                  <h2>Views Over Time</h2>
+                  <div style="max-width: 800px; margin: 0 auto;">
+                      <canvas id="viewsChart"></canvas>
+                  </div>
+                  
+                  <script>
+                      document.getElementById('update-time').textContent = new Date().toLocaleString();
+                      
+                      // Create chart
+                      const ctx = document.getElementById('viewsChart').getContext('2d');
+                      new Chart(ctx, {
+                          type: 'line',
+                          data: chartData,
+                          options: {
+                              responsive: true,
+                              plugins: {
+                                  title: {
+                                      display: true,
+                                      text: 'Page Views (Last 7 Days)'
+                                  }
+                              },
+                              scales: {
+                                  y: {
+                                      beginAtZero: true,
+                                      title: {
+                                          display: true,
+                                          text: 'Views'
+                                      }
+                                  }
+                              }
+                          }
+                      });
+                  </script>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload updated database artifact
+        if: steps.check-db.outputs.database_exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: analytics-database
+          path: data/analytics.db
+          retention-days: 90
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          keep_files: false
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: update-analytics
+    if: always()
+    
+    steps:
+      - name: Notify completion
+        run: |
+          if [ "${{ needs.update-analytics.result }}" == "success" ]; then
+            echo "✅ Analytics updated successfully!"
+            echo "Dashboard available at: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          else
+            echo "❌ Analytics update failed"
+          fi
