@@ -91,7 +91,7 @@ jobs:
           for file in ex1_*.py; do
             python "$file"
           done
-
+          echo "GitHub WORKSPACE: $GITHUB_WORKSPACE"
 
       # now it becomes tricky, the Python files should be executed in docker with grading environment
 
@@ -137,6 +137,7 @@ jobs:
       - name: Create temporary workspace
         run: |
           # Use workspace directory instead of /tmp
+          echo "GitHub WORKSPACE: $GITHUB_WORKSPACE"
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
           mkdir -p "$WORKSPACE"
           artifact_path=${{ steps.download-artifact.outputs.ARTIFACT_LOCATION }}
