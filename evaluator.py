@@ -10,7 +10,7 @@ import importlib.util
 from pathlib import Path
 from datetime import datetime
 
-def evaluate_submission(file_path, github_username):
+def evaluate_submission(file_path, database_path, github_username):
     """Evaluate a student's submission and return score."""
     module_name = Path(file_path).stem
     
@@ -62,7 +62,7 @@ def evaluate_submission(file_path, github_username):
         feedback = [f"❌ Import/Execution failed: {type(e).__name__}: {str(e)[:100]}"]
     
     # Store results in database
-    conn = sqlite3.connect('results.db')
+    conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     
     # Ensure table exists
@@ -134,7 +134,7 @@ def main():
         sys.exit(1)
     
     try:
-        score = evaluate_submission(file_path, github_username)
+        score = evaluate_submission(file_path, database_path, github_username)
         if score >= 0:
             print("Evaluation succeeded.")
             sys.exit(0)

@@ -192,7 +192,7 @@ jobs:
             
             # Check if DB was created
             if [ -f "$TEMP_DB" ]; then
-              echo "Database created successfully for $file"
+              echo "Database $TEMP_DB created successfully for $file"
               SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
               echo "Score for $file: $SCORE"
             else
