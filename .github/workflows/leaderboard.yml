@@ -220,7 +220,7 @@ jobs:
       - name: Upload updated database
         uses: actions/upload-artifact@v4
         with:
-          name: sqlite-database
+          name: main-database
           path: database.db
           retention-days: 90  # Keep for 90 days
 
