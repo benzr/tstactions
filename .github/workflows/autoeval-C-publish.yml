@@ -6,3 +6,15 @@ on:
     workflows: ["Autoeval-B-Evaluation"]
     types:
       - completed
+
+jobs:
+  generate-and-deploy-page:
+    # Only run if the triggering Workflow B was successful
+    if: >
+      github.event_name == 'workflow_run' && 
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
