@@ -177,6 +177,9 @@ jobs:
             fi
           done
 
+          echo "files in workspace after evaluation:"
+          ls -la "$WORKSPACE"
+
       - name: Initialize or load database
         run: |
           DB_FILE="contest.db"
