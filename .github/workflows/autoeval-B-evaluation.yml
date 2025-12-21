@@ -148,7 +148,7 @@ jobs:
       - name: Run evaluation in Docker
         id: evaluate
         run: |
-          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          WORKSPACE="$GITHUB_WORKSPACE/workflow-a-data"
           TEMP_DB="$WORKSPACE/results.db"
           
           # Create empty database
