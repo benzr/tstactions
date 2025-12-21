@@ -142,18 +142,18 @@ jobs:
           echo ""
           echo "All records:"
           sqlite3 $DB_FILE <<EOF
-.mode box
-.headers on
-SELECT 
-  id,
-  substr(message, 1, 40) as message_preview,
-  processing_date,
-  workflow_a_id,
-  workflow_b_id,
-  created_at
-FROM workflow_history
-ORDER BY id;
-EOF
+          .mode box
+          .headers on
+          SELECT 
+            id,
+            substr(message, 1, 40) as message_preview,
+            processing_date,
+            workflow_a_id,
+            workflow_b_id,
+            created_at
+          FROM workflow_history
+          ORDER BY id;
+          EOF
           
           echo ""
           echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")"
