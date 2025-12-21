@@ -1,4 +1,4 @@
-name: Workflow C - Autoeval-C-Publish
+name: Autoeval-C-Publish
 
 on:
   # Trigger when Workflow B completes successfully
