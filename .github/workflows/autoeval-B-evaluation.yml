@@ -105,3 +105,69 @@ jobs:
           # List downloaded files for debugging
           echo "Downloaded student submission files:"
           ls -la ./workflow-a-data/
+
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+
+      - name: Create temporary workspace
+        run: |
+          # Use workspace directory instead of /tmp
+          WORKSPACE="$GITHUB_WORKSPACE/workflow-a-data"
+          
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+          TEMP_DB="$WORKSPACE/results.db"
+          
+          # Create empty database
+          sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
+          
+          echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
+          echo "Database path: $TEMP_DB"
+          
+          # Run Docker with proper user mapping
+            echo "Docker command:"
+            echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+            
+            docker run \
+            --rm \
+            -v "$WORKSPACE:/data:rw" \
+            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
+            --user "root" \
+            sandbox-runner:latest \
+            "/app/student_code.py" \
+            "$TEMP_DB" \
+            "${{ steps.find-file.outputs.username }}"
+
