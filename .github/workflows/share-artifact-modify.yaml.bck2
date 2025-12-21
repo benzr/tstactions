@@ -1,0 +1,162 @@
+# .github/workflows/workflow-b-sqlite.yml
+name: Workflow B - Receiver with SQLite DB
+
+on:
+  workflow_run:
+    workflows: ["Workflow A - Sender"]
+    types:
+      - completed
+
+permissions:
+  actions: read  # Required to download artifacts from other workflows
+  contents: write  # Required to upload artifacts
+
+jobs:
+  process-artifact-with-db:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          
+      - name: Setup SQLite
+        run: |
+          # Install SQLite3 (usually pre-installed on Ubuntu, but confirming)
+          sudo apt-get update
+          sudo apt-get install -y sqlite3
+          sqlite3 --version
+          
+      - name: Download artifact from Workflow A
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: shared-data-from-a
+          path: ./downloaded-artifact
+          
+      - name: Display original content
+        run: |
+          echo "Original content from Workflow A:"
+          cat downloaded-artifact/shared-data.txt || echo "No shared-data.txt found"
+          
+      - name: Modify the content
+        run: |
+          # Change "sent" to "received"
+          sed -i 's/sent/received/' downloaded-artifact/shared-data.txt
+          echo "Modified content:"
+          cat downloaded-artifact/shared-data.txt
+          
+      - name: Create or Update SQLite Database
+        run: |
+          DB_FILE="workflow_history.db"
+          
+          # Create database and table if they don't exist
+          sqlite3 $DB_FILE <<EOF
+          CREATE TABLE IF NOT EXISTS workflow_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT NOT NULL,
+            trigger_date TEXT NOT NULL,
+            workflow_a_run_id TEXT,
+            workflow_b_run_id TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          EOF
+          
+          # Read the message from Workflow A's artifact
+          MESSAGE=$(cat downloaded-artifact/shared-data.txt)
+          TRIGGER_DATE=$(date '+%Y-%m-%d')
+          WORKFLOW_A_ID="${{ github.event.workflow_run.id }}"
+          WORKFLOW_B_ID="${{ github.run_id }}"
+          
+          # Insert new record
+          sqlite3 $DB_FILE <<EOF
+          INSERT INTO workflow_logs (message, trigger_date, workflow_a_run_id, workflow_b_run_id)
+          VALUES ('$MESSAGE', '$TRIGGER_DATE', '$WORKFLOW_A_ID', '$WORKFLOW_B_ID');
+          EOF
+          
+          # Display all records
+          echo "=== Database Contents ==="
+          sqlite3 $DB_FILE "SELECT * FROM workflow_logs;" -box
+          
+          # Count records
+          COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_logs;")
+          echo "Total records in database: $COUNT"
+          
+      - name: Export database to CSV (optional)
+        run: |
+          DB_FILE="workflow_history.db"
+          CSV_FILE="workflow_history.csv"
+          
+          # Export full table to CSV
+          sqlite3 $DB_FILE <<EOF
+          .mode csv
+          .headers on
+          .output $CSV_FILE
+          SELECT * FROM workflow_logs;
+          EOF
+          
+          echo "CSV exported:"
+          head -5 $CSV_FILE
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-b-output-${{ github.run_id }}
+          path: |
+            downloaded-artifact/shared-data.txt
+            workflow_history.db
+            workflow_history.csv
+          retention-days: 1
+          
+      - name: Create summary report
+        run: |
+          DB_FILE="workflow_history.db"
+          
+          # Generate a summary report
+          echo "# Workflow B Execution Report" > summary.md
+          echo "## Run Information" >> summary.md
+          echo "- Workflow A Run ID: ${{ github.event.workflow_run.id }}" >> summary.md
+          echo "- Workflow B Run ID: ${{ github.run_id }}" >> summary.md
+          echo "- Triggered at: $(date)" >> summary.md
+          echo "" >> summary.md
+          
+          # Add database statistics
+          echo "## Database Statistics" >> summary.md
+          
+          TOTAL_RECORDS=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_logs;")
+          echo "- Total records: $TOTAL_RECORDS" >> summary.md
+          
+          LATEST_RECORD=$(sqlite3 $DB_FILE "SELECT message, timestamp FROM workflow_logs ORDER BY id DESC LIMIT 1;" | tr '|' ', ')
+          echo "- Latest record: $LATEST_RECORD" >> summary.md
+          
+          # Add recent records table
+          echo "" >> summary.md
+          echo "## Recent Records (Last 5)" >> summary.md
+          echo "| ID | Message | Timestamp | Workflow A ID |" >> summary.md
+          echo "|----|---------|-----------|---------------|" >> summary.md
+          
+          sqlite3 $DB_FILE <<EOF | while IFS='|' read -r id message timestamp workflow_a_id; do
+          SELECT id, message, timestamp, workflow_a_run_id 
+          FROM workflow_logs 
+          ORDER BY id DESC 
+          LIMIT 5;
+          EOF
+          echo "| $id | $message | $timestamp | $workflow_a_id |" >> summary.md
+          done
+          
+          cat summary.md
+          
+      - name: Upload summary report
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-b-summary-${{ github.run_id }}
+          path: summary.md
+          
+      - name: Archive database for persistence
+        run: |
+          # Optional: Create a backup copy with timestamp
+          cp workflow_history.db "workflow_history_backup_$(date +%Y%m%d_%H%M%S).db"
+          echo "Database backup created"
