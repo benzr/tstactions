@@ -202,6 +202,7 @@ jobs:
         if: steps.check-db.outputs.database_exists == 'true'
         uses: actions/upload-artifact@v4
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           name: analytics-database
           path: data/analytics.db
           retention-days: 90
