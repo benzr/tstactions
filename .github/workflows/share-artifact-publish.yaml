@@ -6,7 +6,8 @@ on:
     - cron: '0 * * * *'
   # ALSO trigger when Workflow B completes successfully
   workflow_run:
-    workflows: ["Workflow B - Persistent Database"] 
+    workflows: ["Workflow B - Persistent Database"]
+    types:
       - completed
 
 # This permission is needed to deploy to GitHub Pages
