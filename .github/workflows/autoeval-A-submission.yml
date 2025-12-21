@@ -1,0 +1,79 @@
+name: Autoeval-A-Submission
+
+
+on:
+  pull_request:
+    paths: ['ex1_*.py']
+
+permissions:
+  contents: write  # Needed for artifact upload
+
+jobs:
+  create-and-upload:
+    runs-on: ubuntu-latest
+
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+
+    outputs:
+      submission_path: ${{ steps.find-file.outputs.file }}
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          #path: ./student-submission
+          path: .
+
+      - name: Debug - List student files
+        run: |
+          echo "=== Student submission directory ==="
+          #cd student-submission && ls -la
+          ls -la
+          echo "=== Looking for ex1 files ==="
+          #cd student-submission && find . -name "ex1_*.py" -type f
+          find . -name "ex1_*.py" -type f
+
+      - name: Find student submission
+        id: find-file
+        run: |
+          FOUND_FILE=""
+          FOUND_USERNAME=""
+          #cd student-submission
+          for file in ex1_*.py; do
+            if [ -f "$file" ]; then
+              FOUND_FILE="$file"
+              USERNAME="${file#ex1_}"
+              USERNAME="${USERNAME%.py}"
+              FOUND_USERNAME="$USERNAME"
+              echo "file=$file" >> $GITHUB_OUTPUT
+              echo "username=$USERNAME" >> $GITHUB_OUTPUT
+              echo "file_basename=$(basename "$file")" >> $GITHUB_OUTPUT
+              echo "Found submission: $file from $USERNAME"
+              # Copy to workspace root for Docker
+              cp "$file" ../
+              break
+            fi
+          done
+          
+          if [ -z "$FOUND_FILE" ]; then
+            echo "ERROR: No valid ex1_*.py file found in PR"
+            echo "Files in ./:"
+            ls -la ./
+            exit 1
+          fi
+
+      - name: Upload student submission artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-submission-${{ steps.find-file.outputs.username }}
+          path: ${{ steps.find-file.outputs.file }} 
+          retention-days: 1  # Keep for 1 day
+
+      - name: Output workflow run ID (for reference)
+        run: |
+          echo "This workflow run ID: ${{ github.run_id }}"
+          echo "This workflow run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

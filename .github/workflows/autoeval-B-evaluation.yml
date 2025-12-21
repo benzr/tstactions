@@ -1,0 +1,99 @@
+name: Autoeval-B-Evaluation
+
+on:
+  workflow_run:
+    workflows: ["Autoeval-A-Submission"]
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  maintain-database:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup SQLite
+        run: sudo apt-get install -y sqlite3
+        
+      - name: Try to download database from previous Workflow B run
+        id: download-previous-db
+        continue-on-error: true
+        run: |
+          echo "Looking for previous database artifact..."
+          
+          # Get list of recent successful workflow runs
+          # We need to find the most recent successful run of THIS workflow
+          RESPONSE=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&per_page=5")
+          
+          echo "Found runs:"
+          echo "$RESPONSE" | jq -r '.workflow_runs[] | "\(.id): \(.name)"'
+          
+          # Find the most recent successful run that's NOT the current run
+          for run_id in $(echo "$RESPONSE" | jq -r '.workflow_runs[].id'); do
+            if [ "$run_id" != "${{ github.run_id }}" ]; then
+              echo "Checking artifacts for run $run_id..."
+              
+              ARTIFACTS=$(curl -s \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
+              
+              # Check if this run has our database artifact
+              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "evaluation-database") | .id')
+              
+              if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+                echo "Found database artifact ID: $ARTIFACT_ID"
+                
+                # Download the artifact
+                curl -L \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+                  -o previous_database.zip
+                
+                if [ -f "previous_database.zip" ]; then
+                  unzip -o previous_database.zip
+                  echo "Successfully loaded database from run $run_id"
+                  echo "previous_run=$run_id" >> $GITHUB_OUTPUT
+                  break
+                fi
+              fi
+            fi
+          done
+          
+          if [ ! -f "workflow.db" ]; then
+            echo "No previous database found. Will create new one."
+            echo "previous_run=none" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Find and download specific artifacts from student submissions
+        run: |
+          # Get list of artifacts from the workflow run
+          ARTIFACTS_JSON=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts")
+          
+          # Extract artifact IDs with matching names
+          echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | select(.name | startswith("student-submission-")) | .id' | while read ARTIFACT_ID; do
+            echo "Downloading artifact ID: $ARTIFACT_ID"
+            
+            # Download each matching artifact
+            curl -L \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+              -o "artifact_$ARTIFACT_ID.zip"
+            
+            # Extract it
+            unzip -q "artifact_$ARTIFACT_ID.zip" -d ./workflow-a-data/
