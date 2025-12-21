@@ -180,6 +180,14 @@ jobs:
           echo "files in workspace after evaluation:"
           ls -la "$WORKSPACE"
 
+      - name: Export results database as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: temp-db
+          path: ${{ github.workspace }}/workflow-a-data/results.db
+          retention-days: 1
+
       - name: Initialize or load database
         run: |
           DB_FILE="contest.db"
