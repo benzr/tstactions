@@ -97,6 +97,7 @@ jobs:
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
               -o "artifact_$ARTIFACT_ID.zip"
-            
+          
             # Extract it
             unzip -q "artifact_$ARTIFACT_ID.zip" -d ./workflow-a-data/
+          done
