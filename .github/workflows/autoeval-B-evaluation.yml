@@ -49,7 +49,7 @@ jobs:
                 "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
               
               # Check if this run has our database artifact
-              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "evaluation-database") | .id')
+              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .id')
               
               if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
                 echo "Found database artifact ID: $ARTIFACT_ID"
@@ -71,7 +71,7 @@ jobs:
             fi
           done
           
-          if [ ! -f "workflow.db" ]; then
+          if [ ! -f "contest.db" ]; then
             echo "No previous database found. Will create new one."
             echo "previous_run=none" >> $GITHUB_OUTPUT
           fi
@@ -177,3 +177,127 @@ jobs:
             fi
           done
 
+      - name: Initialize or load database
+        run: |
+          DB_FILE="contest.db"
+
+          if [ ! -f "$DB_FILE" ]; then
+            echo "Creating new database..."
+            sqlite3 $DB_FILE <<'EOF'
+          CREATE TABLE IF NOT EXISTS workflow_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            score TEXT NOT NULL,
+            processing_date DATE NOT NULL,
+            workflow_a_id TEXT NOT NULL,
+            workflow_b_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          EOF
+            echo "New database created"
+          else
+            RECORD_COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;" 2>/dev/null || echo "0")
+            echo "Loaded existing database with $RECORD_COUNT records"
+          fi
+
+      - name: Process and add to database
+        run: |
+          DB_FILE="contest.db"
+          
+          # Get the score from the temporary results database
+          TEMP_DB="$GITHUB_WORKSPACE/workflow-a-data/results.db"
+          if [ -f "$TEMP_DB" ]; then
+            SCORE=$(sqlite3 "$TEMP_DB" "SELECT score FROM results LIMIT 1;")
+          else
+            SCORE="-"
+          fi
+          
+          # Add new record
+          sqlite3 $DB_FILE <<EOF
+          INSERT INTO workflow_history (score, processing_date, workflow_a_id, workflow_b_id)
+          VALUES ('$SCORE', '$(date +%Y-%m-%d)', '${{ github.event.workflow_run.id }}', '${{ github.run_id }}');
+          EOF
+          
+          NEW_ID=$(sqlite3 $DB_FILE "SELECT last_insert_rowid();")
+          echo "Added record #$NEW_ID"
+
+      - name: Display current database state
+        run: |
+          DB_FILE="workflow.db"
+          
+          echo "=== CURRENT DATABASE CONTENTS ==="
+          echo ""
+          
+          # Show table structure
+          echo "Table structure:"
+          sqlite3 $DB_FILE ".schema"
+          
+          echo ""
+          echo "All records:"
+          sqlite3 $DB_FILE <<EOF
+          .mode box
+          .headers on
+          SELECT 
+            id,
+            score,
+            processing_date,
+            workflow_a_id,
+            workflow_b_id,
+            created_at
+          FROM workflow_history
+          ORDER BY id;
+          EOF
+          
+          echo ""
+          echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")"
+          
+      - name: Upload updated database
+        uses: actions/upload-artifact@v4
+        with:
+          name: contest-database
+          path: contest.db
+          retention-days: 90
+          overwrite: true  # This is KEY - replaces the old database
+          
+      - name: Create summary report
+        run: |
+          DB_FILE="contest.db"
+          
+          cat > summary.md <<EOF
+          # Workflow B Execution Report
+          
+          ## Execution Details
+          - Workflow B Run ID: ${{ github.run_id }}
+          - Triggered by Workflow A: ${{ github.event.workflow_run.id }}
+          - Previous database from run: ${{ steps.download-previous-db.outputs.previous_run || 'None (new database)' }}
+          - Executed at: $(date)
+          
+          ## Database Status
+          - Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")
+          - First record: $(sqlite3 $DB_FILE "SELECT MIN(created_at) FROM workflow_history;")
+          - Latest record: $(sqlite3 $DB_FILE "SELECT MAX(created_at) FROM workflow_history;")
+          
+          ## Recent Activity
+          \`\`\`sql
+          $(sqlite3 $DB_FILE <<'SQL'
+          .mode markdown
+          SELECT 
+            id,
+            score,
+            processing_date,
+            workflow_a_id,
+            workflow_b_id
+          FROM workflow_history
+          ORDER BY id DESC
+          LIMIT 5;
+          SQL
+          )
+          \`\`\`
+          EOF
+          
+          cat summary.md
+          
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-${{ github.run_id }}
+          path: summary.md
