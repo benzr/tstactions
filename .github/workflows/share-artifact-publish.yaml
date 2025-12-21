@@ -109,6 +109,7 @@ jobs:
           EOF
           
           echo "HTML page generated at $OUTPUT_PATH"
+          cat "$OUTPUT_PATH"
           echo "Total records displayed: $(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM workflow_history;")"
 
       - name: Upload artifact for GitHub Pages
