@@ -90,23 +90,17 @@ jobs:
           DB_FILE="workflow.db"
 
           if [ ! -f "$DB_FILE" ]; then
-            echo "new database MUST be created"
-          else
-            echo "existing database found"
-          fi
-          
-          if [ ! -f "$DB_FILE" ]; then
             echo "Creating new database..."
-            sqlite3 $DB_FILE <<EOF
-            CREATE TABLE IF NOT EXISTS workflow_history (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              message TEXT NOT NULL,
-              processing_date DATE NOT NULL,
-              workflow_a_id TEXT NOT NULL,
-              workflow_b_id TEXT NOT NULL,
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            EOF
+            sqlite3 $DB_FILE <<'EOF'
+          CREATE TABLE IF NOT EXISTS workflow_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message TEXT NOT NULL,
+            processing_date DATE NOT NULL,
+            workflow_a_id TEXT NOT NULL,
+            workflow_b_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          EOF
             echo "New database created"
           else
             RECORD_COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;" 2>/dev/null || echo "0")
