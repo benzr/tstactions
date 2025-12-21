@@ -92,7 +92,7 @@ jobs:
                 '</a></td>' ||
                 '<td>' || created_at || '</td>' ||
                 '</tr>'
-          FROM workflow_history
+          FROM attempts
           ORDER BY id DESC;
           SQL
           
@@ -110,7 +110,7 @@ jobs:
           
           echo "HTML page generated at $OUTPUT_PATH"
           cat "$OUTPUT_PATH"
-          echo "Total records displayed: $(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM workflow_history;")"
+          echo "Total records displayed: $(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM attempts;")"
 
       - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v3
