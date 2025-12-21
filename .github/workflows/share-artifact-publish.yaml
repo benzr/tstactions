@@ -83,15 +83,22 @@ jobs:
           EOF
           
           # Use SQLite to query and append rows to the HTML table
-          sqlite3 "$DB_PATH" <<'SQL' >> "$OUTPUT_PATH"
-          .mode html
-          SELECT 
-              id,
-              processing_date,
-              '<span style="font-family: monospace;">' || substr(message, 1, 60) || '</span>',
-              '<a href="https://github.com/${{ github.repository }}/actions/runs/' || workflow_a_id || '">' || substr(workflow_a_id, 1, 8) || '</a>',
-              '<a href="https://github.com/${{ github.repository }}/actions/runs/' || workflow_b_id || '">' || substr(workflow_b_id, 1, 8) || '</a>',
-              created_at
+          sqlite3 "$DB_PATH" >> "$OUTPUT_PATH" <<'SQL'
+          .mode ascii
+          SELECT '<tr>' ||
+                '<td>' || id || '</td>' ||
+                '<td>' || processing_date || '</td>' ||
+                '<td><span style="font-family: monospace;">' || 
+                    replace(message, 'sent', 'received') || 
+                '</span></td>' ||
+                '<td><a href="https://github.com/${{ github.repository }}/actions/runs/' || 
+                    workflow_a_id || '">' || substr(workflow_a_id, 1, 8) || 
+                '</a></td>' ||
+                '<td><a href="https://github.com/${{ github.repository }}/actions/runs/' || 
+                    workflow_b_id || '">' || substr(workflow_b_id, 1, 8) || 
+                '</a></td>' ||
+                '<td>' || created_at || '</td>' ||
+                '</tr>'
           FROM workflow_history
           ORDER BY id DESC;
           SQL
