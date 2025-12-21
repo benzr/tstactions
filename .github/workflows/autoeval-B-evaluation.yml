@@ -184,7 +184,7 @@ jobs:
           if [ ! -f "$DB_FILE" ]; then
             echo "Creating new database..."
             sqlite3 $DB_FILE <<'EOF'
-          CREATE TABLE IF NOT EXISTS workflow_history (
+          CREATE TABLE IF NOT EXISTS attempts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             score TEXT NOT NULL,
             processing_date DATE NOT NULL,
@@ -195,7 +195,7 @@ jobs:
           EOF
             echo "New database created"
           else
-            RECORD_COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;" 2>/dev/null || echo "0")
+            RECORD_COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM attempts;" 2>/dev/null || echo "0")
             echo "Loaded existing database with $RECORD_COUNT records"
           fi
 
@@ -213,7 +213,7 @@ jobs:
           
           # Add new record
           sqlite3 $DB_FILE <<EOF
-          INSERT INTO workflow_history (score, processing_date, workflow_a_id, workflow_b_id)
+          INSERT INTO attempts (score, processing_date, workflow_a_id, workflow_b_id)
           VALUES ('$SCORE', '$(date +%Y-%m-%d)', '${{ github.event.workflow_run.id }}', '${{ github.run_id }}');
           EOF
           
@@ -243,12 +243,12 @@ jobs:
             workflow_a_id,
             workflow_b_id,
             created_at
-          FROM workflow_history
+          FROM attempts
           ORDER BY id;
           EOF
           
           echo ""
-          echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")"
+          echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM attempts;")"
           
       - name: Upload updated database
         uses: actions/upload-artifact@v4
@@ -272,9 +272,9 @@ jobs:
           - Executed at: $(date)
           
           ## Database Status
-          - Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")
-          - First record: $(sqlite3 $DB_FILE "SELECT MIN(created_at) FROM workflow_history;")
-          - Latest record: $(sqlite3 $DB_FILE "SELECT MAX(created_at) FROM workflow_history;")
+          - Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM attempts;")
+          - First record: $(sqlite3 $DB_FILE "SELECT MIN(created_at) FROM attempts;")
+          - Latest record: $(sqlite3 $DB_FILE "SELECT MAX(created_at) FROM attempts;")
           
           ## Recent Activity
           \`\`\`sql
@@ -286,7 +286,7 @@ jobs:
             processing_date,
             workflow_a_id,
             workflow_b_id
-          FROM workflow_history
+          FROM attempts
           ORDER BY id DESC
           LIMIT 5;
           SQL
