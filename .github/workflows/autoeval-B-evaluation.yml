@@ -233,7 +233,7 @@ jobs:
 
       - name: Display current database state
         run: |
-          DB_FILE="workflow.db"
+          DB_FILE="contest.db"
           
           echo "=== CURRENT DATABASE CONTENTS ==="
           echo ""
