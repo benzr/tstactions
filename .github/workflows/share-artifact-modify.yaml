@@ -88,6 +88,12 @@ jobs:
       - name: Initialize or load database
         run: |
           DB_FILE="workflow.db"
+
+          if [ ! -f "$DB_FILE" ]; then
+            echo "new database MUST be created"
+          else
+            echo "existing database found"
+          fi
           
           if [ ! -f "$DB_FILE" ]; then
             echo "Creating new database..."
