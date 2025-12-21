@@ -154,16 +154,19 @@ jobs:
           # Create empty database
           sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
           
-          echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
+          
           echo "Database path: $TEMP_DB"
 
           for file in "$WORKSPACE"/ex1_*.py; do
             if [ -f "$file" ]; then
               echo "Processing: $file"
 
+              USERNAME=$(basename "$file" | sed 's/ex1_//;s/\.py//')
+              echo "Running evaluation for ${USERNAME}"
+
               # Run Docker with proper user mapping
               echo "Docker command:"
-              echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$file:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+              echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$file:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${USERNAME}\""
               
               docker run \
               --rm \
@@ -173,7 +176,7 @@ jobs:
               sandbox-runner:latest \
               "/app/student_code.py" \
               "$TEMP_DB" \
-              "${{ steps.find-file.outputs.username }}"
+              "${USERNAME}"
             fi
           done
 
