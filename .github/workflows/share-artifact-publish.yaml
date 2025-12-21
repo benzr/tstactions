@@ -1,10 +1,7 @@
 name: Workflow C - Publish Database to Pages
 
 on:
-  # Trigger on a schedule (every hour at minute 0)
-  schedule:
-    - cron: '0 * * * *'
-  # ALSO trigger when Workflow B completes successfully
+  # Trigger when Workflow B completes successfully
   workflow_run:
     workflows: ["Workflow B - Persistent Database"]
     types:
@@ -35,12 +32,13 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      - name: Download the latest database artifact
+      - name: Download database from triggering Workflow B
+        #if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
-          # Use the consistent name from Workflow B
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}  # The B that just finished
           name: workflow-database
-          # The artifact contains a .zip, extract it here
           path: ./db-source
 
       - name: Set up SQLite
