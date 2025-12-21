@@ -1,5 +1,5 @@
-# .github/workflows/workflow-b-simple-persistent.yml
-name: Workflow B - Simple Persistent DB
+# .github/workflows/workflow-b-persistent-simple.yml
+name: Workflow B - Persistent Database
 
 on:
   workflow_run:
@@ -12,106 +12,200 @@ permissions:
   contents: write
 
 jobs:
-  process-data:
+  maintain-database:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         
       - name: Setup SQLite
         run: sudo apt-get install -y sqlite3
         
-      - name: Download Latest Database (if exists)
-        id: download-db
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          name: workflow-database
-          workflow: workflow-b-simple-persistent.yml
-          branch: main
-          check_artifacts: true
-          allow_fetching_workflows_from_other_repos: false
+      - name: Try to download database from previous Workflow B run
+        id: download-previous-db
+        continue-on-error: true
+        run: |
+          echo "Looking for previous database artifact..."
           
-      - name: Download Workflow A Data
+          # Get list of recent successful workflow runs
+          # We need to find the most recent successful run of THIS workflow
+          RESPONSE=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&per_page=5")
+          
+          echo "Found runs:"
+          echo "$RESPONSE" | jq -r '.workflow_runs[] | "\(.id): \(.name)"'
+          
+          # Find the most recent successful run that's NOT the current run
+          for run_id in $(echo "$RESPONSE" | jq -r '.workflow_runs[].id'); do
+            if [ "$run_id" != "${{ github.run_id }}" ]; then
+              echo "Checking artifacts for run $run_id..."
+              
+              ARTIFACTS=$(curl -s \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
+              
+              # Check if this run has our database artifact
+              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "workflow-database") | .id')
+              
+              if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+                echo "Found database artifact ID: $ARTIFACT_ID"
+                
+                # Download the artifact
+                curl -L \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+                  -o previous_database.zip
+                
+                if [ -f "previous_database.zip" ]; then
+                  unzip -o previous_database.zip
+                  echo "Successfully loaded database from run $run_id"
+                  echo "previous_run=$run_id" >> $GITHUB_OUTPUT
+                  break
+                fi
+              fi
+            fi
+          done
+          
+          if [ ! -f "workflow.db" ]; then
+            echo "No previous database found. Will create new one."
+            echo "previous_run=none" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Download data from triggering Workflow A
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
           name: shared-data-from-a
-          path: ./input-data
+          path: ./workflow-a-data
           
-      - name: Initialize Database
+      - name: Initialize or load database
         run: |
           DB_FILE="workflow.db"
           
-          # If no database was downloaded, create new one
           if [ ! -f "$DB_FILE" ]; then
             echo "Creating new database..."
             sqlite3 $DB_FILE <<EOF
-            CREATE TABLE executions (
+            CREATE TABLE IF NOT EXISTS workflow_history (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
-              message TEXT,
-              date TEXT,
-              workflow_a_run TEXT,
-              workflow_b_run TEXT,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              message TEXT NOT NULL,
+              processing_date DATE NOT NULL,
+              workflow_a_id TEXT NOT NULL,
+              workflow_b_id TEXT NOT NULL,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
             EOF
+            echo "New database created"
           else
-            echo "Using existing database with $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM executions;") records"
+            RECORD_COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;" 2>/dev/null || echo "0")
+            echo "Loaded existing database with $RECORD_COUNT records"
           fi
           
-      - name: Add New Record
+      - name: Process and add to database
         run: |
           DB_FILE="workflow.db"
-          MESSAGE=$(cat input-data/shared-data.txt 2>/dev/null || echo "No message found")
-          PROCESSED_MESSAGE=$(echo "$MESSAGE" | sed 's/sent/received/')
-          TODAY=$(date '+%Y-%m-%d')
           
-          # Add the new record
+          # Get the message from Workflow A
+          if [ -f "workflow-a-data/shared-data.txt" ]; then
+            MESSAGE=$(cat workflow-a-data/shared-data.txt)
+            PROCESSED_MESSAGE=$(echo "$MESSAGE" | sed 's/sent/received/')
+          else
+            PROCESSED_MESSAGE="Processed at $(date)"
+          fi
+          
+          # Add new record
           sqlite3 $DB_FILE <<EOF
-          INSERT INTO executions (message, date, workflow_a_run, workflow_b_run)
-          VALUES ('$PROCESSED_MESSAGE', '$TODAY', '${{ github.event.workflow_run.id }}', '${{ github.run_id }}');
+          INSERT INTO workflow_history (message, processing_date, workflow_a_id, workflow_b_id)
+          VALUES ('$PROCESSED_MESSAGE', '$(date +%Y-%m-%d)', '${{ github.event.workflow_run.id }}', '${{ github.run_id }}');
           EOF
           
-          echo "Added record #$(sqlite3 $DB_FILE "SELECT last_insert_rowid();")"
+          NEW_ID=$(sqlite3 $DB_FILE "SELECT last_insert_rowid();")
+          echo "Added record #$NEW_ID"
           
-      - name: Display All Records
+      - name: Display current database state
         run: |
           DB_FILE="workflow.db"
-          echo "=== ALL RECORDS IN DATABASE ==="
-          sqlite3 $DB_FILE <<EOF
-          .mode box
-          .headers on
-          SELECT 
-            id,
-            substr(message, 1, 20) as message,
-            date,
-            workflow_a_run,
-            workflow_b_run,
-            created_at
-          FROM executions
-          ORDER BY id;
-          EOF
+          
+          echo "=== CURRENT DATABASE CONTENTS ==="
+          echo ""
+          
+          # Show table structure
+          echo "Table structure:"
+          sqlite3 $DB_FILE ".schema"
           
           echo ""
-          echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM executions;")"
+          echo "All records:"
+          sqlite3 $DB_FILE <<EOF
+.mode box
+.headers on
+SELECT 
+  id,
+  substr(message, 1, 40) as message_preview,
+  processing_date,
+  workflow_a_id,
+  workflow_b_id,
+  created_at
+FROM workflow_history
+ORDER BY id;
+EOF
           
-      - name: Upload Updated Database
+          echo ""
+          echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")"
+          
+      - name: Upload updated database
         uses: actions/upload-artifact@v4
         with:
           name: workflow-database
           path: workflow.db
-          retention-days: 90  # Keep it for a long time
-          overwrite: true  # IMPORTANT: Overwrite the previous database
+          retention-days: 90
+          overwrite: true  # This is KEY - replaces the old database
           
-      - name: Upload Additional Reports
+      - name: Create summary report
+        run: |
+          DB_FILE="workflow.db"
+          
+          cat > summary.md <<EOF
+          # Workflow B Execution Report
+          
+          ## Execution Details
+          - Workflow B Run ID: ${{ github.run_id }}
+          - Triggered by Workflow A: ${{ github.event.workflow_run.id }}
+          - Previous database from run: ${{ steps.download-previous-db.outputs.previous_run || 'None (new database)' }}
+          - Executed at: $(date)
+          
+          ## Database Status
+          - Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM workflow_history;")
+          - First record: $(sqlite3 $DB_FILE "SELECT MIN(created_at) FROM workflow_history;")
+          - Latest record: $(sqlite3 $DB_FILE "SELECT MAX(created_at) FROM workflow_history;")
+          
+          ## Recent Activity
+          \`\`\`sql
+          $(sqlite3 $DB_FILE <<'SQL'
+.mode markdown
+SELECT 
+  id,
+  substr(message, 1, 50) as message,
+  processing_date,
+  workflow_a_id,
+  workflow_b_id
+FROM workflow_history
+ORDER BY id DESC
+LIMIT 5;
+SQL
+          )
+          \`\`\`
+          EOF
+          
+          cat summary.md
+          
+      - name: Upload summary
         uses: actions/upload-artifact@v4
         with:
-          name: reports-${{ github.run_id }}
-          path: |
-            input-data/
-          retention-days: 7
+          name: summary-${{ github.run_id }}
+          path: summary.md
