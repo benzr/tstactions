@@ -163,12 +163,12 @@ jobs:
 
               # Run Docker with proper user mapping
               echo "Docker command:"
-              echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/$file:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+              echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$file:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
               
               docker run \
               --rm \
               -v "$WORKSPACE:/data:rw" \
-              -v "$WORKSPACE/$file:/app/student_code.py:ro" \
+              -v "$file:/app/student_code.py:ro" \
               --user "root" \
               sandbox-runner:latest \
               "/app/student_code.py" \
