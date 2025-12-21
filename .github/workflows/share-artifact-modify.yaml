@@ -84,18 +84,18 @@ jobs:
           DB_FILE="workflow.db"
           echo "=== ALL RECORDS IN DATABASE ==="
           sqlite3 $DB_FILE <<EOF
-.mode box
-.headers on
-SELECT 
-  id,
-  substr(message, 1, 20) as message,
-  date,
-  workflow_a_run,
-  workflow_b_run,
-  created_at
-FROM executions
-ORDER BY id;
-EOF
+          .mode box
+          .headers on
+          SELECT 
+            id,
+            substr(message, 1, 20) as message,
+            date,
+            workflow_a_run,
+            workflow_b_run,
+            created_at
+          FROM executions
+          ORDER BY id;
+          EOF
           
           echo ""
           echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM executions;")"
