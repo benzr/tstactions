@@ -101,3 +101,7 @@ jobs:
             # Extract it
             unzip -q "artifact_$ARTIFACT_ID.zip" -d ./workflow-a-data/
           done
+
+          # List downloaded files for debugging
+          echo "Downloaded student submission files:"
+          ls -la ./workflow-a-data/
