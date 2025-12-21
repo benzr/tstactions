@@ -174,4 +174,6 @@ jobs:
               "/app/student_code.py" \
               "$TEMP_DB" \
               "${{ steps.find-file.outputs.username }}"
+            fi
+          done
 
