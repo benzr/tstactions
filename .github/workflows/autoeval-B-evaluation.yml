@@ -206,7 +206,7 @@ jobs:
           # Get the score from the temporary results database
           TEMP_DB="$GITHUB_WORKSPACE/workflow-a-data/results.db"
           if [ -f "$TEMP_DB" ]; then
-            SCORE=$(sqlite3 "$TEMP_DB" "SELECT score FROM results LIMIT 1;")
+            SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions LIMIT 1;")
           else
             SCORE="-"
           fi
