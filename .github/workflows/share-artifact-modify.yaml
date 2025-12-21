@@ -187,17 +187,17 @@ jobs:
           ## Recent Activity
           \`\`\`sql
           $(sqlite3 $DB_FILE <<'SQL'
-.mode markdown
-SELECT 
-  id,
-  substr(message, 1, 50) as message,
-  processing_date,
-  workflow_a_id,
-  workflow_b_id
-FROM workflow_history
-ORDER BY id DESC
-LIMIT 5;
-SQL
+          .mode markdown
+          SELECT 
+            id,
+            substr(message, 1, 50) as message,
+            processing_date,
+            workflow_a_id,
+            workflow_b_id
+          FROM workflow_history
+          ORDER BY id DESC
+          LIMIT 5;
+          SQL
           )
           \`\`\`
           EOF
