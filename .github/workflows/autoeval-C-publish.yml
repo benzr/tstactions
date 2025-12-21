@@ -7,6 +7,12 @@ on:
     types:
       - completed
 
+# This permission is needed to deploy to GitHub Pages
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
 jobs:
   generate-and-deploy-page:
     # Only run if the triggering Workflow B was successful
