@@ -1,0 +1,8 @@
+name: Workflow C - Autoeval-C-Publish
+
+on:
+  # Trigger when Workflow B completes successfully
+  workflow_run:
+    workflows: ["Autoeval-B-Evaluation"]
+    types:
+      - completed
