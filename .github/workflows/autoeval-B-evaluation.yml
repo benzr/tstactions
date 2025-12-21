@@ -156,18 +156,22 @@ jobs:
           
           echo "Running evaluation for ${{ steps.find-file.outputs.username }}"
           echo "Database path: $TEMP_DB"
-          
-          # Run Docker with proper user mapping
-            echo "Docker command:"
-            echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
-            
-            docker run \
-            --rm \
-            -v "$WORKSPACE:/data:rw" \
-            -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
-            --user "root" \
-            sandbox-runner:latest \
-            "/app/student_code.py" \
-            "$TEMP_DB" \
-            "${{ steps.find-file.outputs.username }}"
+
+          for file in "$WORKSPACE"/ex1_*.py; do
+            if [ -f "$file" ]; then
+              echo "Processing: $file"
+
+              # Run Docker with proper user mapping
+              echo "Docker command:"
+              echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$WORKSPACE/$file:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${{ steps.find-file.outputs.username }}\""
+              
+              docker run \
+              --rm \
+              -v "$WORKSPACE:/data:rw" \
+              -v "$WORKSPACE/$file:/app/student_code.py:ro" \
+              --user "root" \
+              sandbox-runner:latest \
+              "/app/student_code.py" \
+              "$TEMP_DB" \
+              "${{ steps.find-file.outputs.username }}"
 
