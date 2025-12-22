@@ -2,7 +2,7 @@
 name: Execute Image 1
 on:
   workflow_run:
-    workflows: ["Build and Push Images"]
+    workflows: ["Build and Push Images 1 and 2"]
     types:
       - completed
 
