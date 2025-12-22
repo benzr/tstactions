@@ -1,0 +1,23 @@
+name: List Cached Docker Images
+
+on:
+  workflow_dispatch:
+
+jobs:
+  list-docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List cached Docker images
+        run: docker images
+      
+      - name: Display image details
+        run: docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+      
+      - name: Save image list to artifact
+        run: docker images > docker-images.txt
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: docker-images-list
+          path: docker-images.txt
