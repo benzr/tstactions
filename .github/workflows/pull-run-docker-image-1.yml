@@ -2,10 +2,10 @@
 name: Execute Image 1
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Build and Push Images 1 and 2"]
-    types:
-      - completed
+  # workflow_run:
+  #   workflows: ["Build and Push Images 1 and 2"]
+  #   types:
+  #     - completed
 
 jobs:
   execute:
