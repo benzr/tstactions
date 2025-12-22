@@ -37,4 +37,4 @@ jobs:
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
             -p 30100:30100 -p 21212:21212 \
-            ghcr.io/${{ github.repository }}/img2:latest -h -s 100000
+            ghcr.io/${{ github.repository }}/img2:latest -h -s 30000 -q
