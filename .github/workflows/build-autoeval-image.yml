@@ -1,14 +1,12 @@
-name: Rebuild Docker Image
+name: Rebuild Docker Image for Autoeval
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'docker/**'
-      - 'evaluator.py'
-      - 'requirements.txt'
+      - 'docker/autoeval-headless.Dockerfile'
 
 jobs:
-  rebuild-sandbox:
+  rebuild-autoeval:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,22 +18,17 @@ jobs:
       - name: Clear Docker specific cache
         run: |
           # Only clear cache for sandbox-runner
-          rm -rf /tmp/.buildx-cache-sandbox || true
+          rm -rf /tmp/.buildx-cache-autoeval || true
           # Optional: Clear builder cache if needed
           # docker builder prune --filter type=exec.cachemount --force
-
-      - name: Copy necessary files to docker folder
-        run: |
-          cp evaluator.py docker/
-          cp requirements.txt docker/
-
 
       - name: Build fresh image
         uses: docker/build-push-action@v5
         with:
           context: ./docker
-          tags: sandbox-runner:latest
+          file: ./docker/autoeval-headless.Dockerfile
+          tags: autoeval-headless:latest
           load: true
           push: false
-          cache-from: type=local,src=/tmp/.buildx-cache-sandbox
-          cache-to: type=local,dest=/tmp/.buildx-cache-sandbox,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache-autoeval
+          cache-to: type=local,dest=/tmp/.buildx-cache-autoeval,mode=max
