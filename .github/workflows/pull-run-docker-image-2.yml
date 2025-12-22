@@ -1,5 +1,5 @@
 # Common steps for both workflows
-name: Execute Image
+name: Execute Image 2
 on:
   workflow_run:
     workflows: ["Build and Push Images"]
@@ -21,10 +21,6 @@ jobs:
       
       - name: Pull and run image
         run: |
-          # For workflow B, use img1
-          docker pull ghcr.io/${{ github.repository }}/img1:latest
-          docker run --rm ghcr.io/${{ github.repository }}/img1:latest
-          
           # For workflow C, use img2
-          # docker pull ghcr.io/${{ github.repository }}/img2:latest
-          # docker run --rm ghcr.io/${{ github.repository }}/img2:latest
+          docker pull ghcr.io/${{ github.repository }}/img2:latest
+          docker run --rm ghcr.io/${{ github.repository }}/img2:latest
