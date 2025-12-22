@@ -269,7 +269,7 @@ jobs:
         with:
           name: contest-database
           path: contest.db
-          retention-days: 90
+          retention-days: 366
           overwrite: true  # This is KEY - replaces the old database
           
       - name: Create summary report
@@ -315,3 +315,4 @@ jobs:
         with:
           name: summary-${{ github.run_id }}
           path: summary.md
+          retention-days: 366
