@@ -117,7 +117,7 @@ jobs:
       - name: Cache Docker layers
         uses: actions/cache@v4
         with:
-          path: /tmp/.buildx-cache
+          path: /tmp/.buildx-cache-sandbox
           key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-buildx-
@@ -127,14 +127,14 @@ jobs:
         with:
           context: ./docker
           tags: sandbox-runner:latest
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache-sandbox
+          cache-to: type=local,dest=/tmp/.buildx-cache-sandbox-new,mode=max
           load: true
 
       - name: Move cache
         run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache || true
+          rm -rf /tmp/.buildx-cache-sandbox
+          mv /tmp/.buildx-cache-sandbox-new /tmp/.buildx-cache-sandbox || true
 
       - name: Create temporary workspace
         run: |
