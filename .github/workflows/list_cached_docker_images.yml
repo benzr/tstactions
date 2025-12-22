@@ -16,8 +16,8 @@ jobs:
       - name: Display image details
         run: docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
       
-      - name: Show Docker build cache
-        run: docker buildx du
+      - name: Show buildx cache directories
+        run: ls -lh /tmp/.buildx-cache-* 2>/dev/null || echo "No buildx cache directories found"
       
       - name: List buildkit cache
         run: |
@@ -28,6 +28,9 @@ jobs:
           {
             echo "=== Docker Images ==="
             docker images
+            echo ""
+            echo "=== Buildx Cache Directories ==="
+            ls -lh /tmp/.buildx-cache-* 2>/dev/null || echo "No buildx cache directories found"
             echo ""
             echo "=== Docker Build Cache ==="
             docker buildx du --verbose 2>/dev/null || echo "BuildKit cache info unavailable"
