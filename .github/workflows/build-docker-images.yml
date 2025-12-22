@@ -37,7 +37,7 @@ jobs:
       - name: Build and push img1
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./docker
           file: docker/Dockerfile
           push: true
           tags: |
@@ -49,7 +49,7 @@ jobs:
       - name: Build and push img2
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./docker
           file: docker/autoeval-headless.Dockerfile
           push: true
           tags: |
