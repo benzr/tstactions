@@ -19,9 +19,22 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          # Start Xvfb on display :99
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
       
       - name: Pull and run image
         run: |
-          # For workflow C, use img2
           docker pull ghcr.io/${{ github.repository }}/img2:latest
-          docker run --rm ghcr.io/${{ github.repository }}/img2:latest
+          # docker run --rm ghcr.io/${{ github.repository }}/img2:latest
+          # Run container with display shared
+          docker run --rm \
+            -e DISPLAY=$DISPLAY \
+            -v /tmp/.X11-unix:/tmp/.X11-unix \
+            -p 30100:30100 -p 21212:21212 \
+            ghcr.io/${{ github.repository }}/img2:latest
