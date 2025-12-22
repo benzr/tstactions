@@ -9,6 +9,7 @@ RUN apt-get update -q && \
         libavcodec-dev libavformat-dev libswscale-dev \
         python3 python3-pip python3-venv libraw1394-11 libmpfr6 \
         libusb-1.0-0 \
+        wget \
         && \
     apt-get autoclean -y && apt-get autoremove -y && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -20,12 +21,15 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 RUN pip3 install pyzmq cbor2
 
-# if local copy of CoppeliaSim tar.xz is available, use it, else download it
+
+#  if local copy of CoppeliaSim tar.xz is available, use it, else download it
 RUN if [ -f ./tmp/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz ]; then \
-    cp ./tmp/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz /opt/; \
+        echo "Using local copy of CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz" && \
+        cp ./tmp/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz /opt/; \
     else \
-    wget -P /opt/ https://downloads.coppeliarobotics.com/V4_10_0_rev0/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz; \
-    fi       
+        echo "Downloading CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz" && \
+        wget -P /opt/ https://downloads.coppeliarobotics.com/V4_10_0_rev0/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz; \
+    fi     
 RUN tar -xf /opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz -C /opt && \
     rm /opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz
 

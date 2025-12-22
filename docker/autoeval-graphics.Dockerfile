@@ -45,14 +45,15 @@ RUN apt-get install -y --no-install-recommends \
     apt-get autoclean -y && apt-get autoremove -y && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# get CoppeliaSim
 COPY ./tmp/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz /opt/
 #RUN wget -P /opt/ https://downloads.coppeliarobotics.com/V4_10_0_rev0/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz
 RUN tar -xf /opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz -C /opt && \
     rm /opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04.tar.xz
 
 ENV COPPELIASIM_ROOT_DIR=/opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04
-#ENV LD_LIBRARY_PATH=$COPPELIASIM_ROOT_DIR:$LD_LIBRARY_PATH
-ENV LD_LIBRARY_PATH=$COPPELIASIM_ROOT_DIR
+ENV LD_LIBRARY_PATH=$COPPELIASIM_ROOT_DIR:$LD_LIBRARY_PATH
+#ENV LD_LIBRARY_PATH=$COPPELIASIM_ROOT_DIR
 ENV PATH=$COPPELIASIM_ROOT_DIR:$PATH
 
 RUN mkdir -p /shared
