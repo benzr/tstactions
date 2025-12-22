@@ -37,12 +37,22 @@ ENV COPPELIASIM_ROOT_DIR=/opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04
 ENV LD_LIBRARY_PATH=$COPPELIASIM_ROOT_DIR:$LD_LIBRARY_PATH
 ENV PATH=$COPPELIASIM_ROOT_DIR:$PATH
 
-RUN echo '#!/bin/bash\ncd $COPPELIASIM_ROOT_DIR\n/usr/bin/xvfb-run --server-args "-ac -screen 0, 1024x1024x24" coppeliaSim "$@"' > /entrypoint && chmod a+x /entrypoint
+# settings for CoppeliaSim (should be done at runtime)
+# COPY usrset.txt /root/.CoppeliaSim
+
+# RUN echo '#!/bin/bash\ncd $COPPELIASIM_ROOT_DIR\n/usr/bin/xvfb-run --server-args "-ac -screen 0, 1024x1024x24" coppeliaSim "$@"' > /entrypoint && chmod a+x /entrypoint
 # Run CoppeliaSim with the -h option (you can also specify a license key with -Glicense=licenseKey or use of Python with -GpreferredSandboxLang=python):
-CMD ["./coppeliaSim.sh", "-h"]
+# CMD ["./coppeliaSim.sh", "-h"]
 
 # Use following instead to open an application window via an X server:
 # RUN echo '#!/bin/bash\ncd $COPPELIASIM_ROOT_DIR\n./coppeliaSim "$@"' > /entrypoint && chmod a+x /entrypoint
 
-EXPOSE 23000-23500
-ENTRYPOINT ["/entrypoint"]
+COPY run-headless.sh /run-headless.sh
+RUN chmod a+x /run-headless.sh
+
+WORKDIR /opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04
+
+EXPOSE 21212 30100 
+ENTRYPOINT ["/run-headless.sh"]
+# default parameters
+CMD ["-s", "10000", "-q", "/shared/dartv2_final_v0_simple.ttt"]
