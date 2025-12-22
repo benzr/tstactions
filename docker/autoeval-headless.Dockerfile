@@ -57,4 +57,5 @@ WORKDIR /opt/CoppeliaSim_Edu_V4_10_0_rev0_Ubuntu24_04
 EXPOSE 21212 30100 
 ENTRYPOINT ["/run-headless.sh"]
 # default parameters
-CMD ["-s", "10000", "-q", "/shared/dartv2_final_v0_simple.ttt"]
+# CMD ["-s", "10000", "-q", "/shared/dartv2_final_v0_simple.ttt"]
+CMD ["-h","-s", "10000"]
