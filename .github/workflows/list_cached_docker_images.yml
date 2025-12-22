@@ -17,7 +17,7 @@ jobs:
         run: docker images > docker-images.txt
       
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-images-list
           path: docker-images.txt
