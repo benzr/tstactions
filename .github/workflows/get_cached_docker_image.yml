@@ -1,0 +1,45 @@
+name: List Cached Docker Images
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/get_cached_docker_image.yml'
+      
+jobs:
+  list-docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: list /tmp contents before
+        run: ls -la /tmp/
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-autoeval
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache-autoeval
+          cache-to: type=local,dest=/tmp/.buildx-cache-autoeval-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache-autoeval
+          mv /tmp/.buildx-cache-autoeval-new /tmp/.buildx-cache-autoeval || true
+
+      - name: list /tmp contents after
+        run: ls -la /tmp/        
