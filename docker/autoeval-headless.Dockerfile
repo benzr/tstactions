@@ -40,6 +40,8 @@ ENV PATH=$COPPELIASIM_ROOT_DIR:$PATH
 # settings for CoppeliaSim (should be done at runtime)
 # COPY usrset.txt /root/.CoppeliaSim
 
+# change for triggering github actions builds
+
 # RUN echo '#!/bin/bash\ncd $COPPELIASIM_ROOT_DIR\n/usr/bin/xvfb-run --server-args "-ac -screen 0, 1024x1024x24" coppeliaSim "$@"' > /entrypoint && chmod a+x /entrypoint
 # Run CoppeliaSim with the -h option (you can also specify a license key with -Glicense=licenseKey or use of Python with -GpreferredSandboxLang=python):
 # CMD ["./coppeliaSim.sh", "-h"]
