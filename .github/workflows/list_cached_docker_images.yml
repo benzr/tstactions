@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: List cached Docker images
         run: docker images
+
+      - name : list tmp contents
+        run: ls -lah /tmp/
       
       - name: Display image details
         run: docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
