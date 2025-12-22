@@ -2,7 +2,10 @@ name: List Cached Docker Images
 
 on:
   workflow_dispatch:
-
+  push:
+    paths:
+      - '.github/workflows/list_cached_docker_images.yml'
+      
 jobs:
   list-docker-images:
     runs-on: ubuntu-latest
@@ -13,8 +16,22 @@ jobs:
       - name: Display image details
         run: docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
       
+      - name: Show Docker build cache
+        run: docker buildx du
+      
+      - name: List buildkit cache
+        run: |
+          docker buildx du --verbose || echo "BuildKit cache info unavailable"
+      
       - name: Save image list to artifact
-        run: docker images > docker-images.txt
+        run: |
+          {
+            echo "=== Docker Images ==="
+            docker images
+            echo ""
+            echo "=== Docker Build Cache ==="
+            docker buildx du --verbose 2>/dev/null || echo "BuildKit cache info unavailable"
+          } > docker-images.txt
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
