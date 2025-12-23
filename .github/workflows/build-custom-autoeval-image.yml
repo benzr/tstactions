@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./docker
-          file: ./autoeval-headless-runpy.Dockerfile
+          file: docker/autoeval-headless-runpy.Dockerfile
           build-args: |
             BASE_IMAGE_TAG=${{ github.event.inputs.base-image-tag || 'latest' }}
           push: true

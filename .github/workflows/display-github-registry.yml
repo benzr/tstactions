@@ -20,6 +20,8 @@ jobs:
           
           # List packages for the repository owner
           OWNER="${{ github.repository_owner }}"
+
+          echo "Owner is $OWNER"
           
           # Method 1: Using gh CLI (if installed)
           if command -v gh &> /dev/null; then
