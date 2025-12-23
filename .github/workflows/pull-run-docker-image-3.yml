@@ -45,3 +45,11 @@ jobs:
             -v ./eval:/eval \
             -p 30100:30100 -p 21212:21212 \
             ghcr.io/${{ github.repository }}/img3:latest tst
+          # list eval folder content after running
+          ls -ltra ./eval
+
+      - name: Save eval folder content as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: eval-content-after-running-img3
+          path: ./eval
