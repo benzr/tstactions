@@ -1,8 +1,8 @@
 name: Autoeval-B-Evaluation
 
 env:
-  RECOVER_DATABASE: true
-  #RECOVER_DATABASE: false
+  #RECOVER_DATABASE: true
+  RECOVER_DATABASE: false
 
 on:
   workflow_run:
