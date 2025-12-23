@@ -82,7 +82,7 @@ jobs:
       # version that tries to the largest database from previous runs (recover)
       - name: Try to download database from previous Workflow B run (recovery mode)
         if: env.RECOVER_DATABASE == 'true'
-        id: download-previous-db
+        id: download-previous-largest-db
         continue-on-error: true
         run: |
           echo "Looking for previous database artifact from this specific workflow..."
