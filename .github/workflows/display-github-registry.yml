@@ -13,6 +13,7 @@ jobs:
     
     steps:
       - name: Check GHCR packages via API
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -38,11 +39,11 @@ jobs:
           # fi
 
           
-          # Method 2 seems not to work too
-          echo -e "\n=== Method 2: Direct API call ==="
-          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/users/$OWNER/packages?package_type=container" \
-            | jq -r '.[] | "\(.name) (\(.visibility))"'
+          # # Method 2 seems not to work too
+          # echo -e "\n=== Method 2: Direct API call ==="
+          # curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+          #   "https://api.github.com/users/$OWNER/packages?package_type=container" \
+          #   | jq -r '.[] | "\(.name) (\(.visibility))"'
           
           # # Method 3: security issues as credentials may be stored in a visible way
           # echo -e "\n=== Method 3: Docker Registry API ==="
