@@ -1,5 +1,8 @@
 name: Autoeval-B-Evaluation
 
+env:
+  RECOVER_DATABASE: true
+
 on:
   workflow_run:
     workflows: ["Autoeval-A-Submission"]
@@ -76,7 +79,129 @@ jobs:
       #       echo "previous_run=none" >> $GITHUB_OUTPUT
       #     fi
 
+      # version that tries to the largest database from previous runs (recover)
+      - name: Try to download database from previous Workflow B run (recovery mode)
+        if: env.RECOVER_DATABASE == 'true'
+        id: download-previous-db
+        continue-on-error: true
+        run: |
+          echo "Looking for previous database artifact from this specific workflow..."
+          
+          # Get the current workflow ID
+          CURRENT_WORKFLOW_ID=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" | \
+            jq -r '.workflow_id')
+          
+          echo "Current workflow ID: $CURRENT_WORKFLOW_ID"
+          
+          # Get the last 15 successful runs (more to be safe)
+          RESPONSE=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&per_page=15&workflow_id=$CURRENT_WORKFLOW_ID&exclude_pull_requests=true")
+          
+          # Array to store found databases
+          declare -A DATABASES
+          
+          # Check each run (except current) for database artifacts
+          for run_id in $(echo "$RESPONSE" | jq -r '.workflow_runs[].id'); do
+            if [ "$run_id" != "${{ github.run_id }}" ]; then
+              echo "Checking run $run_id for database..."
+              
+              ARTIFACTS=$(curl -s \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
+              
+              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .id')
+              ARTIFACT_SIZE=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .size_in_bytes')
+              
+              if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+                echo "  ✓ Found database: ID=$ARTIFACT_ID, Size=$ARTIFACT_SIZE"
+                DATABASES["$run_id"]="$ARTIFACT_ID:$ARTIFACT_SIZE"
+              fi
+            fi
+          done
+          
+          # If we found databases, find the largest one
+          if [ ${#DATABASES[@]} -gt 0 ]; then
+            echo ""
+            echo "Found ${#DATABASES[@]} database artifact(s):"
+            
+            BEST_RUN_ID=""
+            BEST_ARTIFACT_ID=""
+            BEST_SIZE=0
+            
+            for run_id in "${!DATABASES[@]}"; do
+              IFS=':' read -r ARTIFACT_ID ARTIFACT_SIZE <<< "${DATABASES[$run_id]}"
+              echo "  Run $run_id: $ARTIFACT_SIZE bytes"
+              
+              if [ "$ARTIFACT_SIZE" -gt "$BEST_SIZE" ]; then
+                BEST_RUN_ID="$run_id"
+                BEST_ARTIFACT_ID="$ARTIFACT_ID"
+                BEST_SIZE="$ARTIFACT_SIZE"
+              fi
+            done
+            
+            echo ""
+            echo "Selecting largest database from run $BEST_RUN_ID ($BEST_SIZE bytes)"
+            
+            # Try to download the artifact
+            MAX_RETRIES=3
+            RETRY_COUNT=0
+            DOWNLOAD_SUCCESS=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$DOWNLOAD_SUCCESS" = false ]; do
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "Download attempt $RETRY_COUNT of $MAX_RETRIES..."
+              
+              curl -L \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$BEST_ARTIFACT_ID/zip" \
+                -o previous_database.zip 2>/dev/null
+              
+              if [ -f "previous_database.zip" ] && [ $(wc -c < previous_database.zip) -gt 100 ]; then
+                # Check if zip file is valid and has content
+                if unzip -t previous_database.zip >/dev/null 2>&1; then
+                  unzip -o previous_database.zip
+                  if [ -f "contest.db" ]; then
+                    DOWNLOAD_SUCCESS=true
+                    ACTUAL_SIZE=$(wc -c < contest.db 2>/dev/null || echo 0)
+                    echo "✓ Successfully downloaded database (Actual size: $ACTUAL_SIZE bytes)"
+                  fi
+                fi
+              fi
+              
+              if [ "$DOWNLOAD_SUCCESS" = false ]; then
+                echo "  Download failed, waiting 2 seconds before retry..."
+                sleep 2
+              fi
+            done
+            
+            if [ "$DOWNLOAD_SUCCESS" = true ]; then
+              echo "previous_run=$BEST_RUN_ID" >> $GITHUB_OUTPUT
+              echo "artifact_size=$BEST_SIZE" >> $GITHUB_OUTPUT
+              echo "download_success=true" >> $GITHUB_OUTPUT
+            else
+              echo "ERROR: All download attempts failed"
+              echo "previous_run=none" >> $GITHUB_OUTPUT
+              echo "artifact_size=0" >> $GITHUB_OUTPUT
+              echo "download_success=false" >> $GITHUB_OUTPUT
+            fi
+            
+          else
+            echo "No previous database artifacts found in the last 15 runs."
+            echo "previous_run=none" >> $GITHUB_OUTPUT
+            echo "artifact_size=0" >> $GITHUB_OUTPUT
+            echo "download_success=false" >> $GITHUB_OUTPUT
+          fi
+
+      # working version of above that uses workflow file name to find previous runs
       - name: Try to download database from previous Workflow B run
+        if: env.RECOVER_DATABASE == 'false'
         id: download-previous-db
         continue-on-error: true
         run: |
