@@ -3,6 +3,9 @@ name: Build img3 from img2
 on:
   push:
     branches: [main]
+    paths:
+      - 'docker/autoeval-headless-runpy.Dockerfile'
+      - 'docker/run-headless-py.sh'
   workflow_dispatch:
     inputs:
       base-image-tag:
