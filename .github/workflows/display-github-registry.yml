@@ -22,23 +22,26 @@ jobs:
           OWNER="${{ github.repository_owner }}"
 
           echo "Owner is $OWNER"
+
+          jq --version || sudo apt-get install -y jq          
+          # Method 1: Using gh CLI (if installed) ... not working (try see why)
+          if command -v gh &> /dev/null; then
+            echo "Using gh CLI:"
+            gh api /users/$OWNER/packages?package_type=container \
+              --jq '.[].name'
+          fi
+
           
-          # # Method 1: Using gh CLI (if installed) ... not working (try see why)
-          # if command -v gh &> /dev/null; then
-          #   echo "Using gh CLI:"
-          #   gh api /users/$OWNER/packages?package_type=container \
-          #     --jq '.[].name'
-          # fi
+          # Method 2 seems not to work too
+          echo -e "\n=== Method 2: Direct API call ==="
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/users/$OWNER/packages?package_type=container" \
+            | jq -r '.[] | "\(.name) (\(.visibility))"'
           
-          # # Method 2 seems not to work too
-          # echo -e "\n=== Method 2: Direct API call ==="
-          # curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-          #   "https://api.github.com/users/$OWNER/packages?package_type=container" \
-          #   | jq -r '.[] | "\(.name) (\(.visibility))"'
-          
-          echo -e "\n=== Method 3: Docker Registry API ==="
-          # Login to GHCR
-          echo $GITHUB_TOKEN | docker login ghcr.io -u $OWNER --password-stdin
+          # # Method 3: security issues as credentials may be stored in a visible way
+          # echo -e "\n=== Method 3: Docker Registry API ==="
+          # # Login to GHCR
+          # echo $GITHUB_TOKEN | docker login ghcr.io -u $OWNER --password-stdin
           
           # Try to list repositories (may not work for all scopes)
           echo "Repositories in registry:"
