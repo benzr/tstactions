@@ -1,0 +1,61 @@
+name: Display Docker Registry Contents
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 8 AM
+
+jobs:
+  inspect-registry:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    
+    steps:
+      - name: Check GHCR packages via API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "=== Packages in GHCR ==="
+          
+          # List packages for the repository owner
+          OWNER="${{ github.repository_owner }}"
+          
+          # Method 1: Using gh CLI (if installed)
+          if command -v gh &> /dev/null; then
+            echo "Using gh CLI:"
+            gh api /users/$OWNER/packages?package_type=container \
+              --jq '.[].name'
+          fi
+          
+          echo -e "\n=== Method 2: Direct API call ==="
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/users/$OWNER/packages?package_type=container" \
+            | jq -r '.[] | "\(.name) (\(.visibility))"'
+          
+          echo -e "\n=== Method 3: Docker Registry API ==="
+          # Login to GHCR
+          echo $GITHUB_TOKEN | docker login ghcr.io -u $OWNER --password-stdin
+          
+          # Try to list repositories (may not work for all scopes)
+          echo "Repositories in registry:"
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            https://ghcr.io/v2/_catalog \
+            | jq -r '.repositories[]'
+      
+      - name: Check specific image tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          OWNER="${{ github.repository_owner }}"
+          
+          echo -e "\n=== Tags for img1 ==="
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://ghcr.io/v2/$OWNER/$REPO_NAME/img1/tags/list" \
+            | jq -r '.tags[]'
+          
+          echo -e "\n=== Tags for img2 ==="
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://ghcr.io/v2/$OWNER/$REPO_NAME/img2/tags/list" \
+            | jq -r '.tags[]'
