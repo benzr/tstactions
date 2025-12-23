@@ -41,8 +41,8 @@ jobs:
           if [ "$http_code" = "200" ]; then
             echo -e "\n✓ Success! Packages found:"
             echo "$response_body" | jq '.[] | .name'
-            echo -e "\nFull package info:"
-            echo "$response_body" | jq '.'
+            # echo -e "\nFull package info:"
+            # echo "$response_body" | jq '.'
           else
             echo -e "\n✗ API Error Response:"
             echo "$response_body"
