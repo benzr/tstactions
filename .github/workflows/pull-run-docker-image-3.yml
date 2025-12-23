@@ -1,0 +1,61 @@
+# Common steps for both workflows
+name: Execute Image 3
+on:
+  workflow_dispatch:
+  # workflow_run:
+  #   workflows: ["Build and Push Images 1 and 2"]
+  #   types:
+  #     - completed
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    #if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true  
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          # Start Xvfb on display :99
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+      
+      - name: Pull and run image
+        continue-on-error: true
+        run: |
+          # list files in current directory
+          ls -ltra
+          # Verify git submodule content
+          ls -ltra eval/git/dartv2_simu
+          docker pull ghcr.io/${{ github.repository }}/img3:latest
+          # docker run --rm ghcr.io/${{ github.repository }}/img3:latest
+          # Run container with display shared
+          docker run --rm \
+            -e DISPLAY=$DISPLAY \
+            -v /tmp/.X11-unix:/tmp/.X11-unix \
+            -v ./scenes:/scenes \
+            -v ./eval/py:/eval/py \
+            -v ./eval/git:/eval/git \
+            -p 30100:30100 -p 21212:21212 \
+            ghcr.io/${{ github.repository }}/img3:latest stop
+          # list eval folder content after running
+          ls -ltra ./eval
+
+      - name: Save eval folder content as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-content-after-running-img3
+          path: ./eval

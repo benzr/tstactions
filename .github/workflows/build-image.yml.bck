@@ -8,7 +8,7 @@ on:
       - 'requirements.txt'
 
 jobs:
-  rebuild:
+  rebuild-sandbox:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,10 +17,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Clear Docker cache
+      - name: Clear Docker specific cache
         run: |
-          docker builder prune -af
-          rm -rf /tmp/.buildx-cache || true
+          # Only clear cache for sandbox-runner
+          rm -rf /tmp/.buildx-cache-sandbox || true
+          # Optional: Clear builder cache if needed
+          # docker builder prune --filter type=exec.cachemount --force
 
       - name: Copy necessary files to docker folder
         run: |
@@ -35,5 +37,5 @@ jobs:
           tags: sandbox-runner:latest
           load: true
           push: false
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache-sandbox
+          cache-to: type=local,dest=/tmp/.buildx-cache-sandbox,mode=max

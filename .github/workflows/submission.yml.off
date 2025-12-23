@@ -144,7 +144,7 @@ jobs:
             -v "$WORKSPACE:/data:rw" \
             -v "$WORKSPACE/${{ steps.find-file.outputs.file_basename }}:/app/student_code.py:ro" \
             --user "root" \
-            sandbox-runner:latest \²
+            sandbox-runner:latest \
             "/app/student_code.py" \
             "$TEMP_DB" \
             "${{ steps.find-file.outputs.username }}"

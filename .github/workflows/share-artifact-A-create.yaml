@@ -1,0 +1,35 @@
+# .github/workflows/workflow-a.yml
+name: Workflow A - Sender
+
+on:
+  workflow_dispatch:  # Manual trigger
+  # Or use other triggers like:
+  # push:
+  #   branches: [ main ]
+
+permissions:
+  contents: write  # Needed for artifact upload
+
+jobs:
+  create-and-upload:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Create shared data
+        run: |
+          # Create the data file
+          echo "shared data sent" > shared-data.txt
+          echo "File created with content:"
+          cat shared-data.txt
+          
+      - name: Upload artifact for Workflow B
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-data-from-a
+          path: shared-data.txt
+          retention-days: 1  # Keep for 1 day
+          
+      - name: Output workflow run ID (for reference)
+        run: |
+          echo "This workflow run ID: ${{ github.run_id }}"
+          echo "This workflow run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

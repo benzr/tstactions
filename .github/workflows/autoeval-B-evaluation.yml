@@ -1,0 +1,500 @@
+name: Autoeval-B-Evaluation
+
+env:
+  #RECOVER_DATABASE: true
+  RECOVER_DATABASE: false
+
+on:
+  workflow_run:
+    workflows: ["Autoeval-A-Submission"]
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  maintain-database:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup SQLite
+        run: sudo apt-get install -y sqlite3
+        
+      # - name: Try to download database from previous Workflow B run
+      #   id: download-previous-db
+      #   continue-on-error: true
+      #   run: |
+      #     echo "Looking for previous database artifact..."
+          
+      #     # Get list of recent successful workflow runs
+      #     # We need to find the most recent successful run of THIS workflow
+      #     RESPONSE=$(curl -s \
+      #       -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+      #       -H "Accept: application/vnd.github.v3+json" \
+      #       "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&per_page=5")
+          
+      #     echo "Found runs:"
+      #     echo "$RESPONSE" | jq -r '.workflow_runs[] | "\(.id): \(.name)"'
+          
+      #     # Find the most recent successful run that's NOT the current run
+      #     for run_id in $(echo "$RESPONSE" | jq -r '.workflow_runs[].id'); do
+      #       if [ "$run_id" != "${{ github.run_id }}" ]; then
+      #         echo "Checking artifacts for run $run_id..."
+              
+      #         ARTIFACTS=$(curl -s \
+      #           -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+      #           -H "Accept: application/vnd.github.v3+json" \
+      #           "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
+              
+      #         # Check if this run has our database artifact
+      #         ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .id')
+              
+      #         if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+      #           echo "Found database artifact ID: $ARTIFACT_ID"
+                
+      #           # Download the artifact
+      #           curl -L \
+      #             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+      #             -H "Accept: application/vnd.github.v3+json" \
+      #             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+      #             -o previous_database.zip
+                
+      #           if [ -f "previous_database.zip" ]; then
+      #             unzip -o previous_database.zip
+      #             echo "Successfully loaded database from run $run_id"
+      #             echo "previous_run=$run_id" >> $GITHUB_OUTPUT
+      #             break
+      #           fi
+      #         fi
+      #       fi
+      #     done
+          
+      #     if [ ! -f "contest.db" ]; then
+      #       echo "No previous database found. Will create new one."
+      #       echo "previous_run=none" >> $GITHUB_OUTPUT
+      #     fi
+
+      # version that tries to the largest database from previous runs (recover)
+      - name: Try to download database from previous Workflow B run (recovery mode)
+        if: env.RECOVER_DATABASE == 'true'
+        id: download-previous-largest-db
+        continue-on-error: true
+        run: |
+          echo "Looking for previous database artifact from this specific workflow..."
+          
+          # Get the current workflow ID
+          CURRENT_WORKFLOW_ID=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" | \
+            jq -r '.workflow_id')
+          
+          echo "Current workflow ID: $CURRENT_WORKFLOW_ID"
+          
+          # Get the last 100 successful runs (more to be safe)
+          RESPONSE=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?status=success&per_page=100&workflow_id=$CURRENT_WORKFLOW_ID&exclude_pull_requests=true")
+          
+          # Array to store found databases
+          declare -A DATABASES
+          
+          # Check each run (except current) for database artifacts
+          for run_id in $(echo "$RESPONSE" | jq -r '.workflow_runs[].id'); do
+            if [ "$run_id" != "${{ github.run_id }}" ]; then
+              echo "Checking run $run_id for database..."
+              
+              ARTIFACTS=$(curl -s \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
+              
+              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .id')
+              ARTIFACT_SIZE=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .size_in_bytes')
+              
+              if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+                echo "  ✓ Found database: ID=$ARTIFACT_ID, Size=$ARTIFACT_SIZE"
+                DATABASES["$run_id"]="$ARTIFACT_ID:$ARTIFACT_SIZE"
+              fi
+            fi
+          done
+          
+          # If we found databases, find the largest one
+          if [ ${#DATABASES[@]} -gt 0 ]; then
+            echo ""
+            echo "Found ${#DATABASES[@]} database artifact(s):"
+            
+            BEST_RUN_ID=""
+            BEST_ARTIFACT_ID=""
+            BEST_SIZE=0
+            
+            for run_id in "${!DATABASES[@]}"; do
+              IFS=':' read -r ARTIFACT_ID ARTIFACT_SIZE <<< "${DATABASES[$run_id]}"
+              echo "  Run $run_id: $ARTIFACT_SIZE bytes"
+              
+              if [ "$ARTIFACT_SIZE" -gt "$BEST_SIZE" ]; then
+                BEST_RUN_ID="$run_id"
+                BEST_ARTIFACT_ID="$ARTIFACT_ID"
+                BEST_SIZE="$ARTIFACT_SIZE"
+              fi
+            done
+            
+            echo ""
+            echo "Selecting largest database from run $BEST_RUN_ID ($BEST_SIZE bytes)"
+            
+            # Try to download the artifact
+            MAX_RETRIES=3
+            RETRY_COUNT=0
+            DOWNLOAD_SUCCESS=false
+            
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ] && [ "$DOWNLOAD_SUCCESS" = false ]; do
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "Download attempt $RETRY_COUNT of $MAX_RETRIES..."
+              
+              curl -L \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$BEST_ARTIFACT_ID/zip" \
+                -o previous_database.zip 2>/dev/null
+              
+              if [ -f "previous_database.zip" ] && [ $(wc -c < previous_database.zip) -gt 100 ]; then
+                # Check if zip file is valid and has content
+                if unzip -t previous_database.zip >/dev/null 2>&1; then
+                  unzip -o previous_database.zip
+                  if [ -f "contest.db" ]; then
+                    DOWNLOAD_SUCCESS=true
+                    ACTUAL_SIZE=$(wc -c < contest.db 2>/dev/null || echo 0)
+                    echo "✓ Successfully downloaded database (Actual size: $ACTUAL_SIZE bytes)"
+                  fi
+                fi
+              fi
+              
+              if [ "$DOWNLOAD_SUCCESS" = false ]; then
+                echo "  Download failed, waiting 2 seconds before retry..."
+                sleep 2
+              fi
+            done
+            
+            if [ "$DOWNLOAD_SUCCESS" = true ]; then
+              echo "previous_run=$BEST_RUN_ID" >> $GITHUB_OUTPUT
+              echo "artifact_size=$BEST_SIZE" >> $GITHUB_OUTPUT
+              echo "download_success=true" >> $GITHUB_OUTPUT
+            else
+              echo "ERROR: All download attempts failed"
+              echo "previous_run=none" >> $GITHUB_OUTPUT
+              echo "artifact_size=0" >> $GITHUB_OUTPUT
+              echo "download_success=false" >> $GITHUB_OUTPUT
+            fi
+            
+          else
+            echo "No previous database artifacts found in the last 15 runs."
+            echo "previous_run=none" >> $GITHUB_OUTPUT
+            echo "artifact_size=0" >> $GITHUB_OUTPUT
+            echo "download_success=false" >> $GITHUB_OUTPUT
+          fi
+
+      # working version of above that uses workflow file name to find previous runs
+      - name: Try to download database from previous Workflow B run
+        if: env.RECOVER_DATABASE == 'false'
+        id: download-previous-db
+        continue-on-error: true
+        run: |
+          echo "Looking for previous database artifact..."
+          
+          # Use the workflow file name to filter
+          WORKFLOW_FILE="autoeval-B-evaluation.yml"  # Search with workflow file name
+          
+          # Get runs for this specific workflow file
+          RESPONSE=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$WORKFLOW_FILE/runs?status=success&per_page=5")
+          
+          echo "Previous successful runs of this workflow:"
+          echo "$RESPONSE" | jq -r '.workflow_runs[] | "\(.id): \(.created_at)"'
+          
+          # Find the most recent successful run that's NOT the current run
+          for run_id in $(echo "$RESPONSE" | jq -r '.workflow_runs[].id'); do
+            if [ "$run_id" != "${{ github.run_id }}" ]; then
+              echo "Checking artifacts for run $run_id..."
+              
+              ARTIFACTS=$(curl -s \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/artifacts")
+              
+              # Check if this run has our database artifact
+              ARTIFACT_ID=$(echo "$ARTIFACTS" | jq -r '.artifacts[] | select(.name == "contest-database") | .id')
+              
+              if [ ! -z "$ARTIFACT_ID" ] && [ "$ARTIFACT_ID" != "null" ]; then
+                echo "Found database artifact ID: $ARTIFACT_ID"
+                
+                # Download the artifact
+                curl -L \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+                  -o previous_database.zip
+                
+                if [ -f "previous_database.zip" ]; then
+                  unzip -o previous_database.zip
+                  echo "Successfully loaded database from previous run $run_id"
+                  echo "previous_run=$run_id" >> $GITHUB_OUTPUT
+                  break
+                fi
+              fi
+            fi
+          done
+          
+          if [ ! -f "contest.db" ]; then
+            echo "No previous database found from this workflow. Will create new one."
+            echo "previous_run=none" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Find and download specific artifacts from student submissions
+        run: |
+          # Get list of artifacts from the workflow run
+          ARTIFACTS_JSON=$(curl -s \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts")
+
+          echo "Artifacts JSON:"
+          echo "$ARTIFACTS_JSON"
+          
+          # Extract artifact IDs with matching names
+          echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | select(.name | startswith("student-submission-")) | .id' | while read ARTIFACT_ID; do
+            echo "Downloading artifact ID: $ARTIFACT_ID"
+            
+            # Download each matching artifact
+            curl -L \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" \
+              -o "artifact_$ARTIFACT_ID.zip"
+          
+            # Extract it
+            unzip -q "artifact_$ARTIFACT_ID.zip" -d ./workflow-a-data/
+          done
+
+          # List downloaded files for debugging
+          echo "Downloaded student submission files:"
+          ls -la ./workflow-a-data/
+
+      - name: Copy necessary files to docker folder
+        run: |
+          cp evaluator.py docker/
+          cp requirements.txt docker/
+
+      - name: Set up Docker Buildx with caching
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache-sandbox
+          key: ${{ runner.os }}-buildx-${{ hashFiles('docker/Dockerfile', 'requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker image (cached)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          tags: sandbox-runner:latest
+          cache-from: type=local,src=/tmp/.buildx-cache-sandbox
+          cache-to: type=local,dest=/tmp/.buildx-cache-sandbox-new,mode=max
+          load: true
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache-sandbox
+          mv /tmp/.buildx-cache-sandbox-new /tmp/.buildx-cache-sandbox || true
+
+      - name: Create temporary workspace
+        run: |
+          # Use workspace directory instead of /tmp
+          WORKSPACE="$GITHUB_WORKSPACE/workflow-a-data"
+          
+          # Verify permissions
+          echo "Workspace: $WORKSPACE"
+          ls -la "$WORKSPACE"
+
+      - name: Run evaluation in Docker
+        id: evaluate
+        run: |
+          WORKSPACE="$GITHUB_WORKSPACE/workflow-a-data"
+          TEMP_DB="$WORKSPACE/results.db"
+          
+          # Create empty database
+          sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
+          
+          
+          echo "Database path: $TEMP_DB"
+
+          for file in "$WORKSPACE"/ex1_*.py; do
+            if [ -f "$file" ]; then
+              echo "Processing: $file"
+
+              USERNAME=$(basename "$file" | sed 's/ex1_//;s/\.py//')
+              echo "Running evaluation for ${USERNAME}"
+
+              # Run Docker with proper user mapping
+              echo "Docker command:"
+              echo "docker run --rm -v \"$WORKSPACE:/data:rw\" -v \"$file:/app/student_code.py:ro\" --user \"root\" sandbox-runner:latest \"/app/student_code.py\" \"${USERNAME}\""
+              
+              docker run \
+              --rm \
+              -v "$WORKSPACE:/data:rw" \
+              -v "$file:/app/student_code.py:ro" \
+              --user "root" \
+              sandbox-runner:latest \
+              "/app/student_code.py" \
+              "$TEMP_DB" \
+              "${USERNAME}"
+            fi
+          done
+
+          echo "files in workspace after evaluation:"
+          ls -la "$WORKSPACE"
+
+      - name: Export results database as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: temp-db
+          path: ${{ github.workspace }}/workflow-a-data/results.db
+          retention-days: 1
+
+      - name: Initialize or load database
+        run: |
+          DB_FILE="contest.db"
+
+          if [ ! -f "$DB_FILE" ]; then
+            echo "Creating new database..."
+            sqlite3 $DB_FILE <<'EOF'
+          CREATE TABLE IF NOT EXISTS attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            score TEXT NOT NULL,
+            processing_date DATE NOT NULL,
+            workflow_a_id TEXT NOT NULL,
+            workflow_b_id TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          EOF
+            echo "New database created"
+          else
+            RECORD_COUNT=$(sqlite3 $DB_FILE "SELECT COUNT(*) FROM attempts;" 2>/dev/null || echo "0")
+            echo "Loaded existing database with $RECORD_COUNT records"
+          fi
+
+      - name: Process and add to database
+        run: |
+          DB_FILE="contest.db"
+          
+          # Get the score from the temporary results database
+          TEMP_DB="$GITHUB_WORKSPACE/workflow-a-data/results.db"
+          if [ -f "$TEMP_DB" ]; then
+            SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions LIMIT 1;")
+          else
+            SCORE="-"
+          fi
+          
+          # Add new record
+          sqlite3 $DB_FILE <<EOF
+          INSERT INTO attempts (score, processing_date, workflow_a_id, workflow_b_id)
+          VALUES ('$SCORE', '$(date +%Y-%m-%d)', '${{ github.event.workflow_run.id }}', '${{ github.run_id }}');
+          EOF
+          
+          NEW_ID=$(sqlite3 $DB_FILE "SELECT last_insert_rowid();")
+          echo "Added record #$NEW_ID"
+
+      - name: Display current database state
+        run: |
+          DB_FILE="contest.db"
+          
+          echo "=== CURRENT DATABASE CONTENTS ==="
+          echo ""
+          
+          # Show table structure
+          echo "Table structure:"
+          sqlite3 $DB_FILE ".schema"
+          
+          echo ""
+          echo "All records:"
+          sqlite3 $DB_FILE <<EOF
+          .mode box
+          .headers on
+          SELECT 
+            id,
+            score,
+            processing_date,
+            workflow_a_id,
+            workflow_b_id,
+            created_at
+          FROM attempts
+          ORDER BY id;
+          EOF
+          
+          echo ""
+          echo "Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM attempts;")"
+          
+      - name: Upload updated database
+        uses: actions/upload-artifact@v4
+        with:
+          name: contest-database
+          path: contest.db
+          retention-days: 90
+          overwrite: true  # This is KEY - replaces the old database
+          
+      - name: Create summary report
+        run: |
+          DB_FILE="contest.db"
+          
+          cat > summary.md <<EOF
+          # Workflow B Execution Report
+          
+          ## Execution Details
+          - Workflow B Run ID: ${{ github.run_id }}
+          - Triggered by Workflow A: ${{ github.event.workflow_run.id }}
+          - Previous database from run: ${{ steps.download-previous-db.outputs.previous_run || 'None (new database)' }}
+          - Executed at: $(date)
+          
+          ## Database Status
+          - Total records: $(sqlite3 $DB_FILE "SELECT COUNT(*) FROM attempts;")
+          - First record: $(sqlite3 $DB_FILE "SELECT MIN(created_at) FROM attempts;")
+          - Latest record: $(sqlite3 $DB_FILE "SELECT MAX(created_at) FROM attempts;")
+          
+          ## Recent Activity
+          \`\`\`sql
+          $(sqlite3 $DB_FILE <<'SQL'
+          .mode markdown
+          SELECT 
+            id,
+            score,
+            processing_date,
+            workflow_a_id,
+            workflow_b_id
+          FROM attempts
+          ORDER BY id DESC
+          LIMIT 5;
+          SQL
+          )
+          \`\`\`
+          EOF
+          
+          cat summary.md
+          
+      - name: Upload summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-${{ github.run_id }}
+          path: summary.md
+          retention-days: 90

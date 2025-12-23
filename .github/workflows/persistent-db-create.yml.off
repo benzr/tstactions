@@ -1,0 +1,115 @@
+name: Initialize Database
+
+on:
+  workflow_dispatch:  # Manual trigger only
+  # You could also trigger this when certain files change
+
+jobs:
+  initialize:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create empty database
+        run: |
+          mkdir -p data
+          sqlite3 data/analytics.db "
+            -- Main analytics table
+            CREATE TABLE IF NOT EXISTS page_views (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              date DATE NOT NULL,
+              page_path TEXT NOT NULL,
+              view_count INTEGER DEFAULT 0,
+              unique_visitors INTEGER DEFAULT 0,
+              last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            -- Create indexes for performance
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_page_date 
+            ON page_views(date, page_path);
+            
+            -- Metadata table
+            CREATE TABLE IF NOT EXISTS metadata (
+              key TEXT PRIMARY KEY,
+              value TEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            INSERT OR REPLACE INTO metadata (key, value) VALUES 
+              ('database_version', '1.0'),
+              ('created_at', datetime('now')),
+              ('created_by', 'initialize workflow'),
+              ('last_initialized', datetime('now'));
+            
+            -- Insert some initial data if you want
+            -- INSERT INTO page_views (date, page_path, view_count) 
+            -- VALUES (date('now'), '/index.html', 0);
+          "
+          
+          echo "Database created:"
+          sqlite3 data/analytics.db ".tables"
+
+      - name: Upload database as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: analytics-database
+          path: data/analytics.db
+          retention-days: 90
+
+      - name: Create initial report
+        run: |
+          # Generate a simple HTML report
+          mkdir -p docs
+          cat > docs/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Analytics Dashboard</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; }
+                  .container { max-width: 800px; margin: 0 auto; }
+                  h1 { color: #333; }
+                  .status { padding: 10px; background: #f0f0f0; border-radius: 5px; }
+                  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                  th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+                  th { background-color: #f2f2f2; }
+                  .empty { color: #666; font-style: italic; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>📊 Analytics Dashboard</h1>
+                  <div class="status">
+                      <p>Database initialized successfully!</p>
+                      <p>Run the "Update Analytics" workflow to add data.</p>
+                  </div>
+                  <h2>Page Views</h2>
+                  <table>
+                      <thead>
+                          <tr>
+                              <th>Date</th>
+                              <th>Page</th>
+                              <th>Views</th>
+                              <th>Unique Visitors</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          <tr><td colspan="4" class="empty">No data yet. Run the update workflow.</td></tr>
+                      </tbody>
+                  </table>
+                  <p><small>Last updated: <span id="update-time">Just initialized</span></small></p>
+              </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy initial page to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          keep_files: false

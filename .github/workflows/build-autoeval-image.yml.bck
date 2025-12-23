@@ -1,0 +1,37 @@
+name: Rebuild Docker Image for Autoeval
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'docker/autoeval-headless.Dockerfile'
+
+jobs:
+  rebuild-autoeval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: list /tmp contents before
+        run: ls -la /tmp/
+
+      - name: Clear Docker specific cache
+        run: |
+          # Only clear cache for sandbox-runner
+          rm -rf /tmp/.buildx-cache-autoeval || true
+          # Optional: Clear builder cache if needed
+          # docker builder prune --filter type=exec.cachemount --force
+
+      - name: Build fresh image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker
+          file: ./docker/autoeval-headless.Dockerfile
+          tags: autoeval-headless:latest
+          load: true
+          push: false
+          cache-from: type=local,src=/tmp/.buildx-cache-autoeval
+          cache-to: type=local,dest=/tmp/.buildx-cache-autoeval,mode=max

@@ -1,0 +1,27 @@
+# Common steps for both workflows
+name: Execute Image 1
+on:
+  workflow_dispatch:
+  # workflow_run:
+  #   workflows: ["Build and Push Images 1 and 2"]
+  #   types:
+  #     - completed
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    #if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Pull and run image
+        run: |
+          # For workflow B, use img1
+          docker pull ghcr.io/${{ github.repository }}/img1:latest
+          docker run --rm ghcr.io/${{ github.repository }}/img1:latest

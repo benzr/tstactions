@@ -149,47 +149,51 @@ jobs:
           echo "Workspace: $WORKSPACE"
           ls -la "$WORKSPACE"
 
-      - name: Debug before Docker run
-        run: |
-          echo "=== DEBUG VARIABLES ==="
-          echo "Username: ${{ steps.download-artifact.outputs.github_username }}"
+      # - name: Debug before Docker run
+      #   run: |
+      #     echo "=== DEBUG VARIABLES ==="
+      #     echo "Username: ${{ steps.download-artifact.outputs.github_username }}"
           
-          # Check if variables exist
-          if [ -z "${{ steps.download-artifact.outputs.github_username }}" ]; then
-            echo "ERROR: username is EMPTY!"
-          fi
+      #     # Check if variables exist
+      #     if [ -z "${{ steps.download-artifact.outputs.github_username }}" ]; then
+      #       echo "ERROR: username is EMPTY!"
+      #     fi
           
-          echo "=== FILES ==="
-          WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
-          ls -la "$WORKSPACE" || echo "No workspace"
+      #     echo "=== FILES ==="
+      #     WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
+      #     ls -la "$WORKSPACE" || echo "No workspace"
 
       - name: Run evaluation in Docker
         id: evaluate
         run: |
           WORKSPACE="$GITHUB_WORKSPACE/grade_workspace"
-          GITHUB_USERNAME="${{ steps.download-artifact.outputs.github_username }}"
           
-          for file in ex1_*.py; do
-            TEMP_DB="$WORKSPACE/results_$(basename "$file" .py).db"
-            
+          
+          for file in ${WORKSPACE}/ex1_*.py; do
+            GITHUB_USERNAME=$(basename "$file" .py | sed 's/ex1_//')     
+            TEMP_DB="$WORKSPACE/results_${GITHUB_USERNAME}.db"
+            cp $file "$WORKSPACE/student_code.py"
+
             # Create empty database
             sqlite3 "$TEMP_DB" "VACUUM;" 2>/dev/null || true
             
-            echo "Running evaluation for $file"
+            echo "Running evaluation for : $file"
             echo "Database path: $TEMP_DB"
+            echo "GitHub username: $GITHUB_USERNAME"
             
             # Run Docker with proper user mapping
             docker run \
               --rm \
               -v "$WORKSPACE:/data:rw" \
-              -v "$WORKSPACE/$file:/app/student_code.py:ro" \
+              -v "$WORKSPACE/student_code.py:/app/student_code.py:ro" \
+              -v "$TEMP_DB:/app/results.db:rw" \
               --user "root" \
               sandbox-runner:latest \
               "/app/student_code.py" "$TEMP_DB" "$GITHUB_USERNAME"
             
             # Check if DB was created
             if [ -f "$TEMP_DB" ]; then
-              echo "Database created successfully for $file"
+              echo "Database $TEMP_DB created successfully for $file"
               SCORE=$(sqlite3 "$TEMP_DB" "SELECT result_score FROM submissions ORDER BY id DESC LIMIT 1;" 2>/dev/null || echo "0")
               echo "Score for $file: $SCORE"
             else
@@ -197,4 +201,75 @@ jobs:
             fi
           done
 
+      - name: Download previous database artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: main-database
+          path: ./
+        continue-on-error: true  # First run won't have artifact
+
+      - name: Setup database
+        run: |
+          if [ ! -f database.db ]; then
+            sqlite3 database.db "CREATE TABLE logs (id INTEGER PRIMARY KEY, timestamp TEXT, event TEXT);"
+          fi
+          
+          # Your workflow logic
+          sqlite3 database.db "INSERT INTO logs (timestamp, event) VALUES (datetime('now'), 'workflow_started');"
+
+      - name: Upload updated database
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-database
+          path: database.db
+          retention-days: 90  # Keep for 90 days
+
+      - name: Query database and generate HTML
+        run: |
+          # Export logs table to JSON
+          sqlite3 database.db ".mode json" "SELECT * FROM logs;" > logs.json
+          
+          # Generate HTML page
+          cat > index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+          <title>Workflow Logs</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #4CAF50; color: white; }
+            tr:nth-child(even) { background-color: #f2f2f2; }
+          </style>
+            </head>
+            <body>
+          <h1>Workflow Logs</h1>
+          <table id="logsTable">
+            <thead>
+              <tr><th>ID</th><th>Timestamp</th><th>Event</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <script>
+            fetch('logs.json')
+              .then(r => r.json())
+              .then(data => {
+            const tbody = document.querySelector('#logsTable tbody');
+            data.forEach(log => {
+              const row = tbody.insertRow();
+              row.innerHTML = `<td>${log.id}</td><td>${log.timestamp}</td><td>${log.event}</td>`;
+            });
+              });
+          </script>
+            </body>
+            </html>
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          cname: ${{ github.repository_owner }}.github.io
 
