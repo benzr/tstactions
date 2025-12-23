@@ -44,7 +44,7 @@ jobs:
             -v ./scenes:/scenes \
             -v ./eval:/eval \
             -p 30100:30100 -p 21212:21212 \
-            ghcr.io/${{ github.repository }}/img3:latest tst
+            ghcr.io/${{ github.repository }}/img3:latest stop
           # list eval folder content after running
           ls -ltra ./eval
 
