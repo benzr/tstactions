@@ -32,6 +32,7 @@ jobs:
           echo "DISPLAY=:99" >> $GITHUB_ENV
       
       - name: Pull and run image
+        continue-on-error: true
         run: |
           # list files in current directory
           ls -ltra

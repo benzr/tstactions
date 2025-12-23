@@ -23,12 +23,12 @@ jobs:
 
           echo "Owner is $OWNER"
           
-          # Method 1: Using gh CLI (if installed)
-          if command -v gh &> /dev/null; then
-            echo "Using gh CLI:"
-            gh api /users/$OWNER/packages?package_type=container \
-              --jq '.[].name'
-          fi
+          # # Method 1: Using gh CLI (if installed) ... not working (try see why)
+          # if command -v gh &> /dev/null; then
+          #   echo "Using gh CLI:"
+          #   gh api /users/$OWNER/packages?package_type=container \
+          #     --jq '.[].name'
+          # fi
           
           echo -e "\n=== Method 2: Direct API call ==="
           curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
