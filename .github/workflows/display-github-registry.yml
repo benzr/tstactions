@@ -22,14 +22,20 @@ jobs:
           OWNER="${{ github.repository_owner }}"
 
           echo "Owner is $OWNER"
+          
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/users/${{ github.actor }}/packages?package_type=container" | jq '.[].name'
+
 
           jq --version || sudo apt-get install -y jq          
-          # Method 1: Using gh CLI (if installed) ... not working (try see why)
-          if command -v gh &> /dev/null; then
-            echo "Using gh CLI:"
-            gh api /users/$OWNER/packages?package_type=container \
-              --jq '.[].name'
-          fi
+          # # Method 1: Using gh CLI (if installed) ... not working (try see why)
+          # if command -v gh &> /dev/null; then
+          #   echo "Using gh CLI:"
+          #   gh api /users/$OWNER/packages?package_type=container \
+          #     --jq '.[].name'
+          # fi
 
           
           # Method 2 seems not to work too
@@ -43,11 +49,11 @@ jobs:
           # # Login to GHCR
           # echo $GITHUB_TOKEN | docker login ghcr.io -u $OWNER --password-stdin
           
-          # Try to list repositories (may not work for all scopes)
-          echo "Repositories in registry:"
-          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-            https://ghcr.io/v2/_catalog \
-            | jq -r '.repositories[]'
+          # # Try to list repositories (may not work for all scopes)
+          # echo "Repositories in registry:"
+          # curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+          #   https://ghcr.io/v2/_catalog \
+          #   | jq -r '.repositories[]'
       
       - name: Check specific image tags
         env:
