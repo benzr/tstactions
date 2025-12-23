@@ -1,5 +1,7 @@
 FROM ghcr.io/benzr/tstactions/img2:latest
 
+RUN pip3 install numpy matplotlib
+
 COPY run-headless-py.sh /run-headless-py.sh
 RUN chmod a+x /run-headless-py.sh
 
