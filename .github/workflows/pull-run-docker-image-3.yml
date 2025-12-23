@@ -45,7 +45,8 @@ jobs:
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
             -v ./scenes:/scenes \
-            -v ./eval:/eval \
+            -v ./eval/py:/eval/py \
+            -v ./eval/git:/eval/git \
             -p 30100:30100 -p 21212:21212 \
             ghcr.io/${{ github.repository }}/img3:latest stop
           # list eval folder content after running
