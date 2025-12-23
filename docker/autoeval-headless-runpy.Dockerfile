@@ -8,4 +8,4 @@ EXPOSE 21212 30100
 ENTRYPOINT ["/run-headless-py.sh"]
 # default parameters
 # CMD ["-s", "10000", "-q", "/shared/dartv2_final_v0_simple.ttt"]
-CMD ["stop"]
+CMD ["tst"]
