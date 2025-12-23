@@ -1,0 +1,6 @@
+[submodule "eval/git/dartv2_drivers_v3"]
+	path = eval/git/dartv2_drivers_v3
+	url = https://github.com/benzr/dartv2_drivers_v3.git
+[submodule "eval/git/dartv2_simu"]
+	path = eval/git/dartv2_simu
+	url = https://github.com/benzr/dartv2_simu.git
