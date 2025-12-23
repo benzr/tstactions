@@ -30,6 +30,8 @@ jobs:
       
       - name: Pull and run image
         run: |
+          # list files in current directory
+          ls -ltra
           docker pull ghcr.io/${{ github.repository }}/img3:latest
           # docker run --rm ghcr.io/${{ github.repository }}/img3:latest
           # Run container with display shared
